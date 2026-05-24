@@ -90,7 +90,7 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
 
   return (
     <>
-      <aside className="w-full md:w-[240px] bg-deep flex flex-col border-r border-white/5 overflow-hidden flex-shrink-0">
+      <aside className="w-full md:w-[240px] bg-deep flex flex-col border-r border-white/5 overflow-hidden flex-shrink-0 h-full">
 
         {/* Header */}
         <div className="p-4 border-b border-white/5 flex-shrink-0">
