@@ -30,3 +30,10 @@ body {
 .typing-dot { animation: typingBounce 1.2s ease-in-out infinite; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* En móvil el overflow debe ser visible para el scroll */
+@media (max-width: 768px) {
+  html, body, #root {
+    overflow: auto;
+  }
+}
