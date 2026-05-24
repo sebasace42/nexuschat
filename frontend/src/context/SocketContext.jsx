@@ -6,7 +6,7 @@ const SocketContext = createContext(null);
 
 const SOCKET_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3001'
-  : 'https://nexuschat-production-e1f6.up.railway.app';
+  : 'https://nexuschat-hgos.onrender.com';
 
 export const SocketProvider = ({ children }) => {
   const { user }      = useAuth();

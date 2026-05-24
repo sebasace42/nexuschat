@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BACKEND_URL = 'https://nexuschat-production-e1f6.up.railway.app/api';
+const BACKEND_URL = 'https://nexuschat-hgos.onrender.com/api';
 
 const api = axios.create({
   baseURL: window.location.hostname === 'localhost'
