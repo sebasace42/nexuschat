@@ -5,7 +5,16 @@
 @tailwind utilities;
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, #root { height: 100%; overflow: hidden; }
+
+/* Usar dvh para que respete la barra del navegador en móvil */
+html, body, #root {
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  width: 100%;
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   background: #0b0c10;
@@ -30,12 +39,3 @@ body {
 .typing-dot { animation: typingBounce 1.2s ease-in-out infinite; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
-/* Móvil: permitir scroll dentro de los paneles */
-@media (max-width: 768px) {
-  html, body, #root {
-    overflow: hidden;
-    height: 100%;
-    height: 100dvh; /* dvh = dynamic viewport height, respeta la barra del navegador */
-  }
-}
