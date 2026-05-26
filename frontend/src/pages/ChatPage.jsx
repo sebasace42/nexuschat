@@ -11,10 +11,7 @@ const ChatPage = () => {
   return (
     <div
       className="w-screen flex flex-row overflow-hidden bg-void"
-      style={{
-        height: '100%',
-        maxHeight: '-webkit-fill-available',
-      }}
+      style={{ height: '100%', maxHeight: '-webkit-fill-available' }}
     >
       {/* ServerBar — solo PC */}
       <div className="hidden md:flex flex-shrink-0">
@@ -26,15 +23,13 @@ const ChatPage = () => {
         className={`
           flex-shrink-0 flex-col overflow-hidden
           md:flex md:w-[240px]
-          ${selectedConv === null
-            ? 'flex w-full'
-            : 'hidden'
-          }
+          ${selectedConv === null ? 'flex w-full' : 'hidden'}
         `}
       >
         <Sidebar
           selectedConv={selectedConv}
           onSelectConversation={(conv) => setSelectedConv(conv)}
+          onOpenSettings={() => setShowSettings(true)}
         />
       </div>
 
@@ -43,10 +38,7 @@ const ChatPage = () => {
         className={`
           flex-col flex-1 overflow-hidden
           md:flex
-          ${selectedConv !== null
-            ? 'flex w-full'
-            : 'hidden'
-          }
+          ${selectedConv !== null ? 'flex w-full' : 'hidden'}
         `}
       >
         <ChatArea

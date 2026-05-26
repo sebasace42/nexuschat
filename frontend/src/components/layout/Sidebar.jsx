@@ -6,25 +6,20 @@ import Avatar    from '../ui/Avatar';
 import StatusDot from '../ui/StatusDot';
 import NewChatModal from '../modals/NewChatModal';
 
-const Sidebar = ({ selectedConv, onSelectConversation }) => {
+const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const { user }                = useAuth();
   const { socket, onlineUsers } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [showNewChat,   setShowNewChat]   = useState(false);
   const [activeTab,     setActiveTab]     = useState('all');
 
-  // useEffect 1 — cargar conversaciones cuando el usuario esté listo
-  useEffect(() => {
-    if (user) fetchConversations();
-  }, [user]);
+  useEffect(() => { if (user) fetchConversations(); }, [user]);
 
-  // useEffect 2 — unirse a las salas cuando socket Y conversaciones estén listos
   useEffect(() => {
     if (!socket || conversations.length === 0) return;
     socket.emit('conversations:join', conversations.map((c) => c._id));
   }, [socket, conversations]);
 
-  // useEffect 3 — escuchar actualizaciones de conversaciones en tiempo real
   useEffect(() => {
     if (!socket) return;
     const handler = ({ conversationId, lastMessage }) => {
@@ -53,9 +48,7 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
     try {
       const { data } = await api.get('/conversations');
       setConversations(data);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleSelect = (conv) => {
@@ -72,8 +65,7 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
 
   const formatTime = (d) => {
     if (!d) return '';
-    const date = new Date(d);
-    const now  = new Date();
+    const date = new Date(d), now = new Date();
     const diff = (now - date) / 1000 / 60 / 60 / 24;
     if (diff < 1) return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
     if (diff < 7) return date.toLocaleDateString('es', { weekday: 'short' });
@@ -90,9 +82,15 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
 
   return (
     <>
+      {/*
+       * El sidebar tiene 3 zonas:
+       * 1. Header (logo + botón nuevo chat)
+       * 2. Lista de conversaciones (flex-1, scrollea)
+       * 3. Barra de usuario inferior (fija abajo)
+       */}
       <aside className="w-full md:w-[240px] bg-deep flex flex-col border-r border-white/5 overflow-hidden flex-shrink-0 h-full">
 
-        {/* Header */}
+        {/* ── ZONA 1: Header ── */}
         <div className="p-4 border-b border-white/5 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <h1 className="font-display text-xl font-extrabold text-white tracking-tight">
@@ -100,18 +98,18 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
             </h1>
             <button
               onClick={() => setShowNewChat(true)}
-              className="w-8 h-8 rounded-lg bg-accent hover:bg-accent-bright flex items-center justify-center transition-colors text-white font-bold text-lg"
+              className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-bright flex items-center justify-center transition-colors text-white font-bold text-xl"
               title="Nuevo chat"
             >
               +
             </button>
           </div>
           <div
-            className="flex items-center gap-2 bg-input rounded-full px-3 py-2 border border-white/5 cursor-text"
+            className="flex items-center gap-2 bg-input rounded-full px-3 py-2.5 border border-white/5 cursor-text"
             onClick={() => setShowNewChat(true)}
           >
-            <span className="text-text-muted text-xs">🔍</span>
-            <span className="text-text-muted text-xs">Buscar o nuevo chat...</span>
+            <span className="text-text-muted text-sm">🔍</span>
+            <span className="text-text-muted text-sm">Buscar o nuevo chat...</span>
           </div>
         </div>
 
@@ -135,7 +133,7 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
           ))}
         </div>
 
-        {/* Lista de conversaciones */}
+        {/* ── ZONA 2: Lista de conversaciones ── */}
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {filtered.length === 0 && (
             <div className="text-center py-12 px-4">
@@ -166,13 +164,13 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
               <button
                 key={conv._id}
                 onClick={() => handleSelect(conv)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 text-left transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-0.5 text-left transition-colors ${
                   isActive ? 'bg-active' : 'hover:bg-hover'
                 }`}
               >
                 <div className="relative flex-shrink-0">
-                  <Avatar user={other} size={38} />
-                  <StatusDot isOnline={isOnline} size={11} borderColor="#13141a" />
+                  <Avatar user={other} size={42} />
+                  <StatusDot isOnline={isOnline} size={12} borderColor="#13141a" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -192,7 +190,7 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
                       {conv.lastMessage?.text || 'Inicia la conversación...'}
                     </span>
                     {unread > 0 && (
-                      <span className="min-w-[18px] h-[18px] bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">
+                      <span className="min-w-[20px] h-[20px] bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">
                         {unread > 99 ? '99+' : unread}
                       </span>
                     )}
@@ -201,6 +199,64 @@ const Sidebar = ({ selectedConv, onSelectConversation }) => {
               </button>
             );
           })}
+        </div>
+
+        {/* ── ZONA 3: Barra de usuario inferior ──
+         *
+         * Esta barra siempre está al fondo del sidebar.
+         * En móvil se ve grande y cómoda para tocar.
+         * En PC se ve compacta.
+         * flex-shrink-0 evita que desaparezca.
+         */}
+        <div className="flex-shrink-0 border-t border-white/5 bg-deep">
+          <div className="flex items-center gap-3 px-4 py-3">
+
+            {/* Avatar del usuario con punto verde */}
+            <div className="relative flex-shrink-0">
+              <Avatar user={user} size={38} />
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-accent-green border-2 border-deep" />
+            </div>
+
+            {/* Nombre y tag */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate leading-tight">
+                {user?.username}
+              </p>
+              <p className="text-xs text-text-muted leading-tight">En línea</p>
+            </div>
+
+            {/* Botón Configuración */}
+            <button
+              onClick={onOpenSettings}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-white hover:bg-hover transition-colors flex-shrink-0"
+              title="Configuración"
+            >
+              {/* Ícono engranaje SVG nativo */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 6.34L4.93 4.93"/>
+              </svg>
+            </button>
+
+            {/* Botón Cerrar sesión */}
+            <button
+              onClick={() => {
+                localStorage.removeItem('nexus_token');
+                localStorage.removeItem('nexus_user');
+                window.location.href = '/';
+              }}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-accent-red hover:bg-accent-red/10 transition-colors flex-shrink-0"
+              title="Cerrar sesión"
+            >
+              {/* Ícono salir SVG nativo */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
+
+          </div>
         </div>
 
       </aside>
