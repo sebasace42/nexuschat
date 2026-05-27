@@ -10,7 +10,7 @@ const { setupSocket } = require('./socket/handlers');
 const authRoutes          = require('./routes/auth');
 const usersRoutes         = require('./routes/users');
 const conversationsRoutes = require('./routes/conversations');
-
+const messagesRoutes = require('./routes/messages');
 connectDB();
 
 const app    = express();
@@ -30,6 +30,7 @@ app.use(express.json());
 app.use('/api/auth',          authRoutes);
 app.use('/api/users',         usersRoutes);
 app.use('/api/conversations', conversationsRoutes);
+app.use('/api/messages',      messagesRoutes); 
 
 app.get('/api/health', (_, res) =>
   res.json({ status: 'ok', time: new Date() })

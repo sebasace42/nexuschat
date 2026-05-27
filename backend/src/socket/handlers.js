@@ -24,6 +24,14 @@ const setupSocket = (io) => {
     onlineUsers.set(socket.userId, socket.id);
     await User.findByIdAndUpdate(socket.userId, { isOnline: true });
     io.emit('users:online', Array.from(onlineUsers.keys()));
+  
+socket.on('message:delete', async ({ messageId, conversationId }) => {
+  
+  io.to(conversationId).emit('message:deleted', {
+    messageId,
+    conversationId,
+  });
+});
 
     socket.on('conversations:join', (ids) => {
       ids.forEach((id) => socket.join(id));
