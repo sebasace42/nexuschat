@@ -3,6 +3,41 @@ import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
 import Avatar from '../ui/Avatar';
 
+// ── Íconos SVG del doble check ───────────────────────────────────
+const IconSent = () => (
+  <svg width="15" height="10" viewBox="0 0 16 11" fill="none">
+    <path d="M1 5.5L5.5 10L15 1"
+      stroke="rgba(255,255,255,0.45)" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+const IconDelivered = () => (
+  <svg width="17" height="10" viewBox="0 0 18 11" fill="none">
+    <path d="M1 5.5L5.5 10L15 1"
+      stroke="rgba(255,255,255,0.45)" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 5.5L8.5 10L18 1"
+      stroke="rgba(255,255,255,0.45)" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+const IconRead = () => (
+  <svg width="17" height="10" viewBox="0 0 18 11" fill="none">
+    <path d="M1 5.5L5.5 10L15 1"
+      stroke="#53BDEB" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 5.5L8.5 10L18 1"
+      stroke="#53BDEB" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const MessageStatus = ({ status }) => {
+  if (status === 'read')      return <IconRead />;
+  if (status === 'delivered') return <IconDelivered />;
+  return <IconSent />;
+};
+
 const QUICK_EMOJIS = ['👍','❤️','😂','🔥','😮','👏'];
 
 const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete }) => {
@@ -295,17 +330,11 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
           `}>
             {message.text}
 
-            {/* Hora + ticks en mensajes propios */}
+            {/* Hora + estado del mensaje — solo mensajes propios */}
             {isOwn && (
               <div className="flex items-center gap-1 mt-0.5 justify-end">
                 <span className="text-[10px] text-white/50">{time}</span>
-                <span className={`text-xs ${
-                  message.readBy?.length > 1
-                    ? 'text-accent-teal'
-                    : 'text-white/40'
-                }`}>
-                  ✓✓
-                </span>
+                <MessageStatus status={message.status ?? 'sent'} />
               </div>
             )}
           </div>

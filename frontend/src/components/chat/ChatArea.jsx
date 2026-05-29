@@ -30,6 +30,12 @@ const ChatArea = ({ conversation, onBack }) => {
       .finally(() => setLoading(false));
   }, [conversation?._id]);
 
+  // Marcar mensajes como leídos al abrir el chat (→ doble check azul)
+  useEffect(() => {
+    if (!conversation?._id || !socket) return;
+    socket.emit('message:read', { conversationId: conversation._id });
+  }, [conversation?._id, socket]);
+
   // Scroll automático al último mensaje
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,6 +49,16 @@ const ChatArea = ({ conversation, onBack }) => {
     const onMsg = ({ message, conversationId }) => {
       if (conversationId !== conversation?._id) return;
       setMessages((prev) => [...prev, message]);
+    };
+
+    // Actualización de estado → doble check azul en tiempo real
+    const onStatus = ({ conversationId: cId, status, messageIds }) => {
+      if (cId !== conversation?._id) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          messageIds.includes(m._id) ? { ...m, status } : m
+        )
+      );
     };
 
     // Reacción actualizada
@@ -72,14 +88,15 @@ const ChatArea = ({ conversation, onBack }) => {
     };
 
     socket.on('message:new',      onMsg);
+    socket.on('message:status',   onStatus);
     socket.on('message:reaction', onReact);
     socket.on('typing:start',     onTypingStart);
     socket.on('typing:stop',      onTypingStop);
     socket.on('message:deleted',  onDeleted);
 
-    // Limpiar TODOS los listeners al desmontar
     return () => {
       socket.off('message:new',      onMsg);
+      socket.off('message:status',   onStatus);
       socket.off('message:reaction', onReact);
       socket.off('typing:start',     onTypingStart);
       socket.off('typing:stop',      onTypingStop);
