@@ -39,8 +39,18 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
+  // ── Actualizar datos del usuario sin cerrar sesión ─────────────
+  // Se llama desde SettingsModal después de guardar en el backend
+  const updateUser = useCallback((updatedData) => {
+    setUser((prev) => {
+      const merged = { ...prev, ...updatedData };
+      localStorage.setItem('nexus_user', JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

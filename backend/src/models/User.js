@@ -21,6 +21,7 @@ const userSchema = new mongoose.Schema({
   },
   isOnline: { type: Boolean, default: false },
   lastSeen:  { type: Date,    default: Date.now },
+  bio:       { type: String,  default: '', maxlength: 100 },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {
