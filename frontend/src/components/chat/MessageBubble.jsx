@@ -6,7 +6,7 @@ import Avatar from '../ui/Avatar';
 const QUICK_EMOJIS = ['👍','❤️','😂','🔥','😮','👏'];
 
 const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete }) => {
-  const { socket }             = useSocket();
+  const { socket }              = useSocket();
   const [showMenu, setShowMenu] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -50,11 +50,6 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
     .toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    /*
-     * "group" permite que los hijos usen group-hover
-     * para aparecer solo cuando el mouse está sobre
-     * este div en PC.
-     */
     <div
       className={`
         flex gap-2 group relative
@@ -69,13 +64,13 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
         )}
       </div>
 
-      {/* Columna principal del mensaje */}
+      {/* Columna principal */}
       <div className={`
         max-w-[75%] flex flex-col
         ${isOwn ? 'items-end' : 'items-start'}
       `}>
 
-        {/* Nombre + hora (primer mensaje del bloque) */}
+        {/* Nombre + hora primer mensaje del bloque */}
         {showAvatar && !isOwn && (
           <div className="flex items-baseline gap-2 mb-1 px-1">
             <span
@@ -88,32 +83,20 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
           </div>
         )}
 
-        {/* Fila: acciones izquierda + burbuja + acciones derecha */}
+        {/* Fila: botones + burbuja */}
         <div className={`
           flex items-center gap-1.5
           ${isOwn ? 'flex-row-reverse' : 'flex-row'}
         `}>
 
-          {/* ══════════════════════════════════════════
+          {/* ══════════════════════════════════════
            * BOTONES DE ACCIÓN
            *
-           * LÓGICA RESPONSIVE:
-           *
-           * En PC (md:):
-           *   - opacity-0 por defecto (invisibles)
-           *   - group-hover:opacity-100 → aparecen al hover
-           *
-           * En MÓVIL (sin md:):
-           *   - opacity-100 SIEMPRE visibles
-           *   - El usuario puede tocarlos directamente
-           *
-           * Clase completa:
-           *   "opacity-100 md:opacity-0 md:group-hover:opacity-100"
-           *   Significa:
-           *   - Sin prefijo (móvil): opacity-100 = siempre visible
-           *   - md:opacity-0 = en PC empieza invisible
-           *   - md:group-hover:opacity-100 = en PC aparece al hover
-           * ══════════════════════════════════════════ */}
+           * RESPONSIVE:
+           * - Móvil: opacity-100 = siempre visibles
+           * - PC: opacity-0 por defecto,
+           *       aparecen al hover con group-hover
+           * ══════════════════════════════════════ */}
           <div className={`
             flex items-center gap-1
             opacity-100 md:opacity-0 md:group-hover:opacity-100
@@ -136,7 +119,7 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
                 😊
               </button>
 
-              {/* Panel de emojis rápidos */}
+              {/* Panel de acciones */}
               {showMenu && (
                 <>
                   {/* Overlay para cerrar al tocar fuera */}
@@ -145,9 +128,21 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
                     onClick={() => setShowMenu(false)}
                   />
 
-                  {/* Panel de acciones */}
+                  {/*
+                   * FIX CRÍTICO — Menú se abre hacia ABAJO
+                   *
+                   * ANTES (bug): bottom-full mb-2
+                   *   → el menú se abría hacia arriba
+                   *   → en el primer mensaje se salía
+                   *     de la pantalla y no se veía
+                   *
+                   * AHORA (fix): top-full mt-2
+                   *   → el menú se abre hacia abajo
+                   *   → siempre visible sin importar
+                   *     la posición del mensaje
+                   */}
                   <div className={`
-                    absolute bottom-full mb-2 z-50
+                    absolute top-full mt-2 z-50
                     bg-panel border border-white/15
                     rounded-2xl shadow-2xl overflow-hidden
                     min-w-[200px]
@@ -196,7 +191,15 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
                         {deleting ? (
                           <div className="w-4 h-4 border-2 border-accent-red/30 border-t-accent-red rounded-full animate-spin" />
                         ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <svg
+                            width="16" height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
                             <polyline points="3 6 5 6 21 6"/>
                             <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
                             <path d="M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/>
@@ -220,18 +223,28 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
                         border-t border-white/5
                       "
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="16" height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <line x1="18" y1="6" x2="6" y2="18"/>
                         <line x1="6" y1="6" x2="18" y2="18"/>
                       </svg>
                       Cancelar
                     </button>
+
                   </div>
                 </>
               )}
             </div>
+            {/* Fin botón reaccionar */}
 
-            {/* Botón papelera — solo mensajes propios, VISIBLE EN MÓVIL */}
+            {/* Botón papelera directo — solo mensajes propios */}
             {isOwn && (
               <button
                 onClick={handleDelete}
@@ -250,7 +263,15 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
                 {deleting ? (
                   <div className="w-3.5 h-3.5 border-2 border-text-muted/30 border-t-text-muted rounded-full animate-spin" />
                 ) : (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="15" height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
                     <path d="M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/>
@@ -262,7 +283,7 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
             )}
 
           </div>
-          {/* FIN BOTONES DE ACCIÓN */}
+          {/* Fin botones de acción */}
 
           {/* ══ BURBUJA DEL MENSAJE ══ */}
           <div className={`
@@ -288,10 +309,10 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
               </div>
             )}
           </div>
-          {/* FIN BURBUJA */}
+          {/* Fin burbuja */}
 
         </div>
-        {/* FIN FILA BURBUJA + ACCIONES */}
+        {/* Fin fila burbuja + botones */}
 
         {/* ══ REACCIONES EXISTENTES ══ */}
         {grouped && Object.keys(grouped).length > 0 && (
@@ -317,7 +338,7 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
         )}
 
       </div>
-      {/* FIN COLUMNA PRINCIPAL */}
+      {/* Fin columna principal */}
 
     </div>
   );
