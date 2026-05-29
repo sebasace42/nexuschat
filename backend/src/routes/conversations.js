@@ -44,10 +44,19 @@ router.post('/', protect, async (req, res) => {
 
 router.get('/:id/messages', protect, async (req, res) => {
   try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
+    const skip = (page - 1) * limit;
+
+    const total = await Message.countDocuments({ conversation: req.params.id });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
     const messages = await Message.find({ conversation: req.params.id })
       .populate('sender', 'username avatarColor')
       .sort({ createdAt: 1 })
-      .limit(100);
+      .skip(skip)
+      .limit(limit);
+
     await Message.updateMany(
       { conversation: req.params.id, readBy: { $ne: req.user._id } },
       { $addToSet: { readBy: req.user._id } }
@@ -55,7 +64,15 @@ router.get('/:id/messages', protect, async (req, res) => {
     await Conversation.findByIdAndUpdate(req.params.id, {
       $set: { [`unreadCount.${req.user._id}`]: 0 },
     });
-    res.json(messages);
+
+    res.json({
+      messages,
+      page,
+      limit,
+      total,
+      totalPages,
+      hasMore: page < totalPages,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

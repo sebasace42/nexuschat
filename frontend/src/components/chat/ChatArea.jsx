@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import api          from '../../api/axios';
 import { useAuth }  from '../../context/AuthContext';
 import { useSocket} from '../../context/SocketContext';
@@ -6,26 +6,46 @@ import MessageBubble from './MessageBubble';
 import MessageInput  from './MessageInput';
 import Avatar        from '../ui/Avatar';
 import StatusDot     from '../ui/StatusDot';
+import { requestNotificationPermission, showIncomingMessageNotification } from '../../utils/notifications';
 
 const ChatArea = ({ conversation, onBack }) => {
   const { user }                = useAuth();
   const { socket, onlineUsers } = useSocket();
   const [messages,    setMessages]    = useState([]);
+  const [searchTerm,  setSearchTerm]  = useState('');
+  const [page,        setPage]        = useState(1);
+  const [hasMore,     setHasMore]     = useState(false);
   const [loading,     setLoading]     = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const bottomRef = useRef(null);
 
   const other         = conversation?.participants?.find((p) => p._id !== user._id);
   const isOtherOnline = onlineUsers.includes(other?._id);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const filteredMessages = useMemo(() => {
+    if (!normalizedSearch) return messages;
+    return messages.filter((msg) =>
+      msg.text?.toLowerCase().includes(normalizedSearch)
+    );
+  }, [messages, normalizedSearch]);
 
   // Cargar mensajes al cambiar de conversación
   useEffect(() => {
     if (!conversation) return;
     setMessages([]);
     setTypingUsers([]);
+    setPage(1);
+    setHasMore(false);
     setLoading(true);
-    api.get(`/conversations/${conversation._id}/messages`)
-      .then(({ data }) => setMessages(data))
+
+    api.get(`/conversations/${conversation._id}/messages?page=1&limit=30`)
+      .then(({ data }) => {
+        const nextMessages = Array.isArray(data) ? data : data.messages || [];
+        setMessages(nextMessages);
+        setHasMore(!Array.isArray(data) ? data.hasMore : false);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [conversation?._id]);
@@ -36,10 +56,17 @@ const ChatArea = ({ conversation, onBack }) => {
     socket.emit('message:read', { conversationId: conversation._id });
   }, [conversation?._id, socket]);
 
+  // Solicitar permiso de notificaciones al entrar al chat
+  useEffect(() => {
+    requestNotificationPermission().catch(() => undefined);
+  }, []);
+
   // Scroll automático al último mensaje
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (page === 1) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, page]);
 
   // Todos los eventos del socket en un solo useEffect
   useEffect(() => {
@@ -48,7 +75,16 @@ const ChatArea = ({ conversation, onBack }) => {
     // Nuevo mensaje en tiempo real
     const onMsg = ({ message, conversationId }) => {
       if (conversationId !== conversation?._id) return;
+
       setMessages((prev) => [...prev, message]);
+
+      if (message?.sender?._id && message.sender._id !== user?._id) {
+        showIncomingMessageNotification({
+          senderName: message.sender.username || 'NexusChat',
+          text: message.text,
+          conversationId,
+        });
+      }
     };
 
     // Actualización de estado → doble check azul en tiempo real
@@ -109,6 +145,24 @@ const ChatArea = ({ conversation, onBack }) => {
     if (i === 0) return true;
     if (msgs[i - 1].sender._id !== msgs[i].sender._id) return true;
     return (new Date(msgs[i].createdAt) - new Date(msgs[i - 1].createdAt)) / 60000 > 5;
+  };
+
+  const loadMoreMessages = async () => {
+    if (!conversation || loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const { data } = await api.get(`/conversations/${conversation._id}/messages?page=${nextPage}&limit=30`);
+      const nextMessages = Array.isArray(data) ? data : data.messages || [];
+      setMessages((prev) => [...nextMessages, ...prev]);
+      setPage(nextPage);
+      setHasMore(!Array.isArray(data) ? data.hasMore : false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   // Eliminar mensaje del estado local inmediatamente
@@ -189,6 +243,52 @@ const ChatArea = ({ conversation, onBack }) => {
       {/* ══ ÁREA DE MENSAJES ══ */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
 
+        {/* Buscador responsive */}
+        <div className="sticky top-0 z-10 mb-3 rounded-2xl border border-white/8 bg-main/95 p-2 shadow-lg backdrop-blur md:p-3">
+          <label className="flex items-center gap-2 rounded-xl bg-input px-3 py-2.5 text-text-muted focus-within:ring-1 focus-within:ring-accent/60">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar mensajes"
+              className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="rounded-full p-1 text-text-muted transition-colors hover:bg-hover hover:text-white"
+                aria-label="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            )}
+          </label>
+          <p className="mt-1 text-[11px] text-text-muted">
+            {normalizedSearch
+              ? `${filteredMessages.length} resultado${filteredMessages.length === 1 ? '' : 's'} para “${searchTerm.trim()}”`
+              : 'Busca mensajes dentro de esta conversación'}
+          </p>
+        </div>
+
+        {/* Botón de paginación */}
+        {hasMore && (
+          <div className="sticky top-0 z-10 mb-3 flex justify-center">
+            <button
+              type="button"
+              onClick={loadMoreMessages}
+              disabled={loadingMore}
+              className="rounded-full border border-white/10 bg-panel px-4 py-2 text-xs font-semibold text-text-primary shadow-lg transition hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingMore ? 'Cargando...' : 'Cargar mensajes anteriores'}
+            </button>
+          </div>
+        )}
+
         {/* Spinner de carga */}
         {loading && (
           <div className="flex items-center justify-center py-12">
@@ -210,13 +310,19 @@ const ChatArea = ({ conversation, onBack }) => {
         )}
 
         {/* Lista de mensajes */}
-        {messages.map((msg, i) => (
+        {!loading && normalizedSearch && filteredMessages.length === 0 && (
+          <div className="py-10 text-center text-sm text-text-muted">
+            No se encontraron mensajes con ese texto.
+          </div>
+        )}
+
+        {filteredMessages.map((msg, i) => (
           <MessageBubble
             key={msg._id}
             message={msg}
             isOwn={msg.sender._id === user._id}
             conversationId={conversation._id}
-            showAvatar={showAvatar(messages, i)}
+            showAvatar={showAvatar(filteredMessages, i)}
             onDelete={handleDeleteMessage}
           />
         ))}
