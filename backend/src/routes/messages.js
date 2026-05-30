@@ -2,37 +2,46 @@ const express      = require('express');
 const Message      = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const { protect }  = require('../middleware/auth');
+const { cloudinary } = require('../config/cloudinary');
 
 const router = express.Router();
 
-// DELETE /api/messages/:id
-// Solo el autor puede eliminar su propio mensaje
 router.delete('/:id', protect, async (req, res) => {
   try {
-    // 1. Buscar el mensaje por ID
     const message = await Message.findById(req.params.id);
 
-    // 2. Verificar que existe
     if (!message) {
       return res.status(404).json({ message: 'Mensaje no encontrado' });
     }
 
-    // 3. Verificar que el usuario que pide eliminarlo es el autor
-    //    Convertimos a string porque MongoDB devuelve ObjectId
     if (message.sender.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'No puedes eliminar mensajes de otros usuarios' });
+      return res.status(403).json({ message: 'No puedes eliminar mensajes de otros' });
     }
 
     const conversationId = message.conversation.toString();
 
-    // 4. Eliminar el mensaje de MongoDB
+    // Si el mensaje tiene archivo, eliminarlo de Cloudinary
+    if (message.mediaPublicId) {
+      try {
+        const resourceType = message.mediaType === 'image' ? 'image'
+          : message.mediaType === 'document' ? 'raw'
+          : 'video';
+
+        await cloudinary.uploader.destroy(message.mediaPublicId, {
+          resource_type: resourceType,
+        });
+        console.log(`✅ Archivo eliminado de Cloudinary: ${message.mediaPublicId}`);
+      } catch (cloudErr) {
+        console.error('Error eliminando de Cloudinary:', cloudErr);
+        // Continuamos aunque falle Cloudinary
+      }
+    }
+
     await Message.findByIdAndDelete(req.params.id);
 
-    // 5. Si este era el lastMessage de la conversación,
-    //    actualizamos con el mensaje anterior
+    // Actualizar lastMessage si era el último
     const conversation = await Conversation.findById(conversationId);
     if (conversation?.lastMessage?.toString() === req.params.id) {
-      // Buscar el mensaje más reciente que quede
       const previousMessage = await Message.findOne({
         conversation: conversationId,
       }).sort({ createdAt: -1 });
@@ -42,12 +51,7 @@ router.delete('/:id', protect, async (req, res) => {
       });
     }
 
-    // 6. Devolver el ID del mensaje eliminado y la sala
-    //    para que el frontend emita el socket
-    res.json({
-      messageId:      req.params.id,
-      conversationId,
-    });
+    res.json({ messageId: req.params.id, conversationId });
 
   } catch (err) {
     console.error('Error eliminando mensaje:', err);

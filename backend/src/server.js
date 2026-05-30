@@ -40,3 +40,9 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 Servidor en http://localhost:${PORT}`);
 });
+
+// Agrega este require junto a los demás
+const uploadRoutes = require('./routes/upload');
+
+// Agrega este use junto a los demás
+app.use('/api/upload', uploadRoutes);
