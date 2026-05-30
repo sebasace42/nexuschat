@@ -5,49 +5,6 @@ const jwt          = require('jsonwebtoken');
 
 const onlineUsers = new Map();
 
-// ── Al conectarse el receptor, pasar 'sent' → 'delivered' ─────────────────
-async function markPendingAsDelivered(io, userId, onlineUsers) {
-  try {
-    const convs = await Conversation.find({ participants: userId }, '_id');
-    for (const conv of convs) {
-      const msgs = await Message.find({
-        conversation: conv._id,
-        sender: { $ne: userId },
-        status: 'sent',
-      }, '_id sender');
-
-      if (!msgs.length) continue;
-
-      const ids = msgs.map((m) => m._id);
-      await Message.updateMany(
-        { _id: { $in: ids } },
-        { $set: { status: 'delivered', deliveredAt: new Date() } }
-      );
-
-      // Notificar a los remitentes
-      const bySender = {};
-      msgs.forEach((m) => {
-        const sid = m.sender.toString();
-        if (!bySender[sid]) bySender[sid] = [];
-        bySender[sid].push(m._id.toString());
-      });
-
-      Object.entries(bySender).forEach(([senderId, messageIds]) => {
-        const senderSocketId = onlineUsers.get(senderId);
-        if (senderSocketId) {
-          io.to(senderSocketId).emit('message:status', {
-            conversationId: conv._id.toString(),
-            status: 'delivered',
-            messageIds,
-          });
-        }
-      });
-    }
-  } catch (err) {
-    console.error('Error markPendingAsDelivered:', err);
-  }
-}
-
 const setupSocket = (io) => {
 
   io.use(async (socket, next) => {
@@ -67,49 +24,6 @@ const setupSocket = (io) => {
     onlineUsers.set(socket.userId, socket.id);
     await User.findByIdAndUpdate(socket.userId, { isOnline: true });
     io.emit('users:online', Array.from(onlineUsers.keys()));
-
-    // ── Al conectarse, marcar mensajes pendientes como delivered ──
-    await markPendingAsDelivered(io, socket.userId, onlineUsers);
-
-    // ── Receptor abre el chat → doble check AZUL ─────────────────
-    socket.on('message:read', async ({ conversationId }) => {
-      try {
-        const msgs = await Message.find({
-          conversation: conversationId,
-          sender: { $ne: socket.userId },
-          status: { $in: ['sent', 'delivered'] },
-        }, '_id sender');
-
-        if (!msgs.length) return;
-
-        const ids = msgs.map((m) => m._id);
-        await Message.updateMany(
-          { _id: { $in: ids } },
-          { $set: { status: 'read', readAt: new Date() } }
-        );
-
-        // Agrupar por remitente y notificar a cada uno
-        const bySender = {};
-        msgs.forEach((m) => {
-          const sid = m.sender.toString();
-          if (!bySender[sid]) bySender[sid] = [];
-          bySender[sid].push(m._id.toString());
-        });
-
-        Object.entries(bySender).forEach(([senderId, messageIds]) => {
-          const senderSocketId = onlineUsers.get(senderId);
-          if (senderSocketId) {
-            io.to(senderSocketId).emit('message:status', {
-              conversationId,
-              status: 'read',
-              messageIds,
-            });
-          }
-        });
-      } catch (err) {
-        console.error('Error message:read:', err);
-      }
-    });
   
 socket.on('message:delete', async ({ messageId, conversationId }) => {
   
@@ -131,7 +45,6 @@ socket.on('message:delete', async ({ messageId, conversationId }) => {
           sender: socket.userId,
           text: text.trim(),
           readBy: [socket.userId],
-          status: 'sent',
         });
         message = await message.populate('sender', 'username avatarColor');
 
@@ -168,6 +81,12 @@ socket.on('message:delete', async ({ messageId, conversationId }) => {
     socket.on('typing:stop', ({ conversationId }) => {
       socket.to(conversationId).emit('typing:stop',
         { userId: socket.userId, conversationId });
+    });
+
+    // Emitir mensaje multimedia subido vía REST/Cloudinary a todos en la sala
+    socket.on('message:new_media', ({ message, conversationId }) => {
+      if (!message || !conversationId) return;
+      io.to(conversationId).emit('message:new', { message, conversationId });
     });
 
     socket.on('message:react', async ({ messageId, emoji, conversationId }) => {

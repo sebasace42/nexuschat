@@ -3,42 +3,104 @@ import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
 import Avatar from '../ui/Avatar';
 
-// ── Íconos SVG del doble check ───────────────────────────────────
+const QUICK_EMOJIS = ['👍','❤️','😂','🔥','😮','👏'];
+
+// ── Íconos de estado (doble check) ───────────────────────────────
 const IconSent = () => (
   <svg width="15" height="10" viewBox="0 0 16 11" fill="none">
-    <path d="M1 5.5L5.5 10L15 1"
-      stroke="rgba(255,255,255,0.45)" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M1 5.5L5.5 10L15 1" stroke="rgba(255,255,255,0.45)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 const IconDelivered = () => (
   <svg width="17" height="10" viewBox="0 0 18 11" fill="none">
-    <path d="M1 5.5L5.5 10L15 1"
-      stroke="rgba(255,255,255,0.45)" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M4 5.5L8.5 10L18 1"
-      stroke="rgba(255,255,255,0.45)" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M1 5.5L5.5 10L15 1" stroke="rgba(255,255,255,0.45)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 5.5L8.5 10L18 1" stroke="rgba(255,255,255,0.45)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 const IconRead = () => (
   <svg width="17" height="10" viewBox="0 0 18 11" fill="none">
-    <path d="M1 5.5L5.5 10L15 1"
-      stroke="#53BDEB" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M4 5.5L8.5 10L18 1"
-      stroke="#53BDEB" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M1 5.5L5.5 10L15 1" stroke="#53BDEB" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 5.5L8.5 10L18 1" stroke="#53BDEB" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
-
 const MessageStatus = ({ status }) => {
   if (status === 'read')      return <IconRead />;
   if (status === 'delivered') return <IconDelivered />;
   return <IconSent />;
 };
 
-const QUICK_EMOJIS = ['👍','❤️','😂','🔥','😮','👏'];
+// ── Formatear tamaño de archivo ──────────────────────────────────
+const formatSize = (bytes) => {
+  if (!bytes) return '';
+  if (bytes < 1024)        return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// ── Componente de contenido multimedia ───────────────────────────
+const MediaContent = ({ message, isOwn }) => {
+  const { mediaType, mediaUrl, mediaName, mediaSize } = message;
+  if (!mediaUrl) return null;
+
+  if (mediaType === 'image') {
+    return (
+      <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="block">
+        <img
+          src={mediaUrl}
+          alt={mediaName || 'imagen'}
+          className="rounded-xl max-w-[260px] max-h-[260px] w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+          onError={(e) => { e.target.style.display = 'none'; }}
+        />
+      </a>
+    );
+  }
+
+  if (mediaType === 'video') {
+    return (
+      <video
+        src={mediaUrl}
+        controls
+        className="rounded-xl max-w-[260px] max-h-[200px] w-full"
+      />
+    );
+  }
+
+  if (mediaType === 'audio') {
+    return (
+      <audio src={mediaUrl} controls className="w-full max-w-[240px] h-10" />
+    );
+  }
+
+  // Documento / archivo genérico
+  return (
+    <a
+      href={mediaUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`
+        flex items-center gap-3 p-3 rounded-xl
+        ${isOwn ? 'bg-white/10 hover:bg-white/20' : 'bg-white/5 hover:bg-white/10'}
+        transition-colors max-w-[240px]
+      `}
+    >
+      <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium truncate">{mediaName || 'Archivo'}</p>
+        <p className="text-[10px] opacity-60 mt-0.5">{formatSize(mediaSize)}</p>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-60">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </a>
+  );
+};
 
 const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete }) => {
   const { socket }              = useSocket();
@@ -322,19 +384,39 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
 
           {/* ══ BURBUJA DEL MENSAJE ══ */}
           <div className={`
-            px-4 py-2.5 rounded-2xl text-sm leading-relaxed
+            rounded-2xl text-sm leading-relaxed overflow-hidden
             ${isOwn
               ? 'bg-accent text-white rounded-br-md'
               : 'bg-input text-text-primary rounded-bl-md'
             }
+            ${message.mediaUrl && !message.text ? '' : ''}
           `}>
-            {message.text}
+            {/* Contenido multimedia */}
+            {message.mediaUrl && (
+              <div className={message.text ? 'p-2 pb-0' : 'p-2'}>
+                <MediaContent message={message} isOwn={isOwn} />
+              </div>
+            )}
 
-            {/* Hora + estado del mensaje — solo mensajes propios */}
+            {/* Texto del mensaje */}
+            {message.text && (
+              <div className="px-4 py-2.5">
+                {message.text}
+              </div>
+            )}
+
+            {/* Hora + estado — solo mensajes propios */}
             {isOwn && (
-              <div className="flex items-center gap-1 mt-0.5 justify-end">
+              <div className="flex items-center gap-1 pb-1.5 pr-3 justify-end">
                 <span className="text-[10px] text-white/50">{time}</span>
                 <MessageStatus status={message.status ?? 'sent'} />
+              </div>
+            )}
+
+            {/* Hora — mensajes de otros (sin check) */}
+            {!isOwn && !message.mediaUrl && (
+              <div className="px-4 pb-1.5 -mt-1.5">
+                <span className="text-[10px] text-text-muted">{time}</span>
               </div>
             )}
           </div>
