@@ -2,19 +2,20 @@ import { useState, useRef, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
 import EmojiPicker from './EmojiPicker';
+import GifPicker   from './GifPicker';
 
 const MessageInput = ({ conversationId, disabled }) => {
   const { socket }              = useSocket();
   const [text, setText]         = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
-  const textareaRef = useRef(null);
-  const typingRef   = useRef(null);
-  const fileInputRef   = useRef(null);
-  const imageInputRef  = useRef(null);
+  const [showGif,   setShowGif]   = useState(false);
+  const textareaRef  = useRef(null);
+  const typingRef    = useRef(null);
+  const fileInputRef  = useRef(null);
+  const imageInputRef = useRef(null);
 
-  // ── Preview del archivo seleccionado ──────────────────────────
-  const [preview, setPreview]   = useState(null); // { file, url, type, name, size }
-  const [uploading, setUploading] = useState(false);
+  const [preview,     setPreview]     = useState(null);
+  const [uploading,   setUploading]   = useState(false);
   const [uploadError, setUploadError] = useState('');
 
   // Auto-resize textarea
@@ -25,7 +26,7 @@ const MessageInput = ({ conversationId, disabled }) => {
     el.style.height = Math.min(el.scrollHeight, 150) + 'px';
   }, [text]);
 
-  // ── Enviar mensaje de texto (por socket) ─────────────────────
+  // ── Enviar texto por socket ───────────────────────────────────
   const sendText = () => {
     if (!text.trim() || !socket || disabled) return;
     socket.emit('message:send', { conversationId, text: text.trim() });
@@ -34,7 +35,7 @@ const MessageInput = ({ conversationId, disabled }) => {
     textareaRef.current?.focus();
   };
 
-  // ── Enviar archivo (por API REST → Cloudinary) ───────────────
+  // ── Enviar archivo a Cloudinary ───────────────────────────────
   const sendFile = async (file) => {
     if (!file || !conversationId) return;
     setUploading(true);
@@ -49,12 +50,7 @@ const MessageInput = ({ conversationId, disabled }) => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // Emitir el mensaje por socket para que aparezca en tiempo real
-      socket?.emit('message:new_media', {
-        message,
-        conversationId,
-      });
-
+      socket?.emit('message:new_media', { message, conversationId });
       setText('');
       setPreview(null);
       textareaRef.current?.focus();
@@ -65,15 +61,29 @@ const MessageInput = ({ conversationId, disabled }) => {
     }
   };
 
-  // ── Seleccionar imagen ────────────────────────────────────────
+  // ── Enviar GIF desde GIPHY ────────────────────────────────────
+  const sendGif = async ({ url, title }) => {
+    if (!socket || disabled) return;
+    try {
+      const { data: message } = await api.post('/upload/gif', {
+        conversationId,
+        gifUrl:   url,
+        gifTitle: title,
+      });
+      socket?.emit('message:new_media', { message, conversationId });
+    } catch (err) {
+      console.error('Error enviando GIF:', err);
+    }
+  };
+
+  // ── Seleccionar imagen/video ──────────────────────────────────
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
     const url = URL.createObjectURL(file);
     setPreview({
-      file,
-      url,
+      file, url,
       type: file.type.startsWith('image/') ? 'image' : 'file',
       name: file.name,
       size: file.size,
@@ -86,13 +96,7 @@ const MessageInput = ({ conversationId, disabled }) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
-    setPreview({
-      file,
-      url: null,
-      type: 'file',
-      name: file.name,
-      size: file.size,
-    });
+    setPreview({ file, url: null, type: 'file', name: file.name, size: file.size });
     setUploadError('');
   };
 
@@ -105,11 +109,8 @@ const MessageInput = ({ conversationId, disabled }) => {
 
   // ── Enviar (texto o archivo) ──────────────────────────────────
   const handleSend = () => {
-    if (preview) {
-      sendFile(preview.file);
-    } else {
-      sendText();
-    }
+    if (preview) sendFile(preview.file);
+    else sendText();
   };
 
   // ── Typing indicators ─────────────────────────────────────────
@@ -140,13 +141,8 @@ const MessageInput = ({ conversationId, disabled }) => {
       {/* ── PREVIEW del archivo seleccionado ── */}
       {preview && (
         <div className="mb-2 bg-input border border-white/10 rounded-xl p-3 flex items-center gap-3">
-          {/* Miniatura si es imagen */}
           {preview.type === 'image' && preview.url ? (
-            <img
-              src={preview.url}
-              alt="preview"
-              className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-            />
+            <img src={preview.url} alt="preview" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
           ) : (
             <div className="w-14 h-14 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted">
@@ -155,8 +151,6 @@ const MessageInput = ({ conversationId, disabled }) => {
               </svg>
             </div>
           )}
-
-          {/* Info del archivo */}
           <div className="flex-1 min-w-0">
             <p className="text-sm text-white truncate">{preview.name}</p>
             <p className="text-xs text-text-muted mt-0.5">{formatSize(preview.size)}</p>
@@ -166,13 +160,8 @@ const MessageInput = ({ conversationId, disabled }) => {
               </div>
             )}
           </div>
-
-          {/* Botón cancelar */}
           {!uploading && (
-            <button
-              onClick={cancelPreview}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
-            >
+            <button onClick={cancelPreview} className="w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-white/10 transition-colors flex-shrink-0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
@@ -198,20 +187,8 @@ const MessageInput = ({ conversationId, disabled }) => {
         <div className="flex items-center gap-1 px-3 py-2 border-b border-white/5">
 
           {/* Inputs ocultos */}
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleImageChange}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,audio/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
+          <input ref={imageInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleImageChange} />
+          <input ref={fileInputRef}  type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,audio/*" className="hidden" onChange={handleFileChange} />
 
           {/* Botón imagen/video */}
           <button
@@ -221,7 +198,8 @@ const MessageInput = ({ conversationId, disabled }) => {
             className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors disabled:opacity-40"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </button>
@@ -238,19 +216,51 @@ const MessageInput = ({ conversationId, disabled }) => {
             </svg>
           </button>
 
+          {/* ── BOTÓN GIF ── */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowGif((v) => !v);
+                setShowEmoji(false);
+              }}
+              disabled={disabled}
+              title="Enviar GIF"
+              className={`
+                w-7 h-7 rounded-lg flex items-center justify-center
+                text-[11px] font-bold transition-colors disabled:opacity-40
+                ${showGif
+                  ? 'bg-accent text-white'
+                  : 'text-text-muted hover:text-accent-bright hover:bg-hover'
+                }
+              `}
+            >
+              GIF
+            </button>
+
+            {/* Panel GIF */}
+            {showGif && (
+              <GifPicker
+                onSelect={sendGif}
+                onClose={() => setShowGif(false)}
+              />
+            )}
+          </div>
+
           <div className="flex-1" />
 
           {/* Formato texto */}
           <button onClick={() => setText((p) => `**${p}**`)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors font-bold text-xs">B</button>
-          <button onClick={() => setText((p) => `_${p}_`)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors italic text-xs">I</button>
+          <button onClick={() => setText((p) => `_${p}_`)}  className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors italic text-xs">I</button>
           <button onClick={() => setText((p) => `\`${p}\``)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors text-xs">&lt;/&gt;</button>
         </div>
 
         {/* Área de texto + emoji + enviar */}
         <div className="flex items-end gap-2 px-3 py-2.5">
+
+          {/* Emoji picker */}
           <div className="relative flex-shrink-0">
             <button
-              onClick={() => setShowEmoji((v) => !v)}
+              onClick={() => { setShowEmoji((v) => !v); setShowGif(false); }}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors"
             >
               😊
@@ -263,6 +273,7 @@ const MessageInput = ({ conversationId, disabled }) => {
             )}
           </div>
 
+          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={text}
@@ -272,10 +283,10 @@ const MessageInput = ({ conversationId, disabled }) => {
             }}
             disabled={disabled || uploading}
             placeholder={
-              uploading ? 'Subiendo archivo...'
-              : disabled ? 'Selecciona una conversación...'
-              : preview ? 'Agrega un mensaje (opcional)...'
-              : 'Escribe un mensaje... (Enter para enviar)'
+              uploading  ? 'Subiendo archivo...' :
+              disabled   ? 'Selecciona una conversación...' :
+              preview    ? 'Agrega un mensaje (opcional)...' :
+              'Escribe un mensaje... (Enter para enviar)'
             }
             rows={1}
             className="flex-1 bg-transparent text-text-primary placeholder-text-muted text-sm resize-none outline-none leading-relaxed max-h-[150px] overflow-y-auto"
