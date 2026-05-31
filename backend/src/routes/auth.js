@@ -51,9 +51,14 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', protect, async (req, res) => {
   res.json({
-    _id: req.user._id, username: req.user.username,
-    email: req.user.email, avatarColor: req.user.avatarColor,
-    bio: req.user.bio ?? '',
+    _id:             req.user._id,
+    username:        req.user.username,
+    email:           req.user.email,
+    avatarColor:     req.user.avatarColor,
+    bio:             req.user.bio ?? '',
+    hideOnline:      req.user.hideOnline      ?? false,
+    hideLastSeen:    req.user.hideLastSeen    ?? false,
+    hideReadReceipt: req.user.hideReadReceipt ?? false,
   });
 });
 

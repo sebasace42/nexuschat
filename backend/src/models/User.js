@@ -22,6 +22,12 @@ const userSchema = new mongoose.Schema({
   isOnline: { type: Boolean, default: false },
   lastSeen:  { type: Date,    default: Date.now },
   bio:       { type: String,  default: '', maxlength: 100 },
+
+  // ── Privacidad ────────────────────────────────────────────────
+  hideOnline:      { type: Boolean, default: false },
+  hideLastSeen:    { type: Boolean, default: false },
+  hideReadReceipt: { type: Boolean, default: false },
+
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {
