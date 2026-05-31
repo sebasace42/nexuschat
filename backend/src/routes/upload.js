@@ -64,4 +64,40 @@ router.post('/', protect, upload.single('file'), async (req, res) => {
   }
 });
 
+// POST /api/upload/gif
+// Guarda un GIF de Tenor como mensaje (sin subir a Cloudinary, solo guarda la URL)
+router.post('/gif', protect, async (req, res) => {
+  try {
+    const { conversationId, gifUrl } = req.body;
+
+    if (!conversationId || !gifUrl)
+      return res.status(400).json({ message: 'conversationId y gifUrl son requeridos' });
+
+    let message = await Message.create({
+      conversation:  conversationId,
+      sender:        req.user._id,
+      text:          '',
+      readBy:        [req.user._id],
+      status:        'sent',
+      mediaUrl:      gifUrl,
+      mediaType:     'image',
+      mediaName:     'GIF',
+      mediaMimeType: 'image/gif',
+    });
+
+    message = await message.populate('sender', 'username avatarColor');
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: message._id,
+      updatedAt:   new Date(),
+    });
+
+    res.status(201).json(message);
+
+  } catch (err) {
+    console.error('Error guardando GIF:', err);
+    res.status(500).json({ message: err.message || 'Error del servidor' });
+  }
+});
+
 module.exports = router;

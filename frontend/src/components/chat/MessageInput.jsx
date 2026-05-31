@@ -61,14 +61,13 @@ const MessageInput = ({ conversationId, disabled }) => {
     }
   };
 
-  // ── Enviar GIF desde GIPHY ────────────────────────────────────
-  const sendGif = async ({ url, title }) => {
-    if (!socket || disabled) return;
+  // ── Enviar GIF desde Tenor ───────────────────────────────────
+  const sendGif = async (gifUrl) => {
+    if (!gifUrl || !socket || disabled) return;
     try {
       const { data: message } = await api.post('/upload/gif', {
         conversationId,
-        gifUrl:   url,
-        gifTitle: title,
+        gifUrl,
       });
       socket?.emit('message:new_media', { message, conversationId });
     } catch (err) {
