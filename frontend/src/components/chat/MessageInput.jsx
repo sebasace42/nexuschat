@@ -178,7 +178,7 @@ const MessageInput = ({ conversationId, disabled }) => {
 
       {/* ── INPUT PRINCIPAL ── */}
       <div className={`
-        bg-input border rounded-2xl overflow-hidden transition-colors
+        bg-input border rounded-2xl overflow-visible transition-colors
         ${disabled ? 'border-white/3 opacity-60' : 'border-white/5 focus-within:border-accent/30'}
       `}>
 
