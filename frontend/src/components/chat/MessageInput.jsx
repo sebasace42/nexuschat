@@ -87,14 +87,13 @@ const MessageInput = ({ conversationId, disabled }) => {
   };
 
   // ── Enviar GIF desde GIPHY ────────────────────────────────────
-  const sendGif = async ({ url, title }) => {
-    if (!socket || disabled) return;
+  const sendGif = async (gifUrl) => {
+    if (!gifUrl || !conversationId || disabled) return;
     setShowGif(false);
     try {
       const { data: message } = await api.post('/upload/gif', {
         conversationId,
-        gifUrl:   url,
-        gifTitle: title,
+        gifUrl,
       });
       socket?.emit('message:new_media', { message, conversationId });
     } catch (err) {
@@ -283,7 +282,8 @@ const MessageInput = ({ conversationId, disabled }) => {
             {/* Botón GIF */}
             <div className="relative">
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowGif((v) => !v);
                   setShowEmoji(false);
                 }}
