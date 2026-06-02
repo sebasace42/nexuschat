@@ -65,7 +65,10 @@ const GifPicker = ({ onSelect, onClose }) => {
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
       {/* Panel principal */}
-      <div className="absolute bottom-full mb-2 left-0 z-50 w-72 bg-panel border border-white/15 rounded-2xl shadow-2xl overflow-hidden">
+      <div
+        className="absolute bottom-full mb-2 left-0 z-50 w-72 bg-panel border border-white/15 rounded-2xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Barra de búsqueda */}
         <div className="p-3 border-b border-white/5">
@@ -125,7 +128,7 @@ const GifPicker = ({ onSelect, onClose }) => {
               {gifs.map((gif) => (
                 <button
                   key={gif.id}
-                  onClick={() => { onSelect(getUrl(gif)); onClose(); }}
+                  onClick={(e) => { e.stopPropagation(); onSelect(getUrl(gif)); }}
                   className="relative aspect-video rounded-lg overflow-hidden bg-white/5 hover:ring-2 hover:ring-accent hover:scale-[1.02] transition-all"
                 >
                   <img
