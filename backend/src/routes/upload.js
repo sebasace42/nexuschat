@@ -65,7 +65,7 @@ router.post('/', protect, upload.single('file'), async (req, res) => {
 });
 
 // POST /api/upload/gif
-// Guarda un GIF de Tenor como mensaje (sin subir a Cloudinary, solo guarda la URL)
+// Guarda un GIF de GIPHY como mensaje (solo guarda la URL, sin subir a Cloudinary)
 router.post('/gif', protect, async (req, res) => {
   try {
     const { conversationId, gifUrl } = req.body;
