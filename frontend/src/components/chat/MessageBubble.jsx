@@ -501,16 +501,18 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
 
           {/* ══ BURBUJA DEL MENSAJE ══ */}
           <div className={`
-            rounded-2xl text-sm leading-relaxed overflow-hidden
-            ${isOwn
-              ? 'bg-accent text-white rounded-br-md'
-              : 'bg-input text-text-primary rounded-bl-md'
+            rounded-2xl text-sm leading-relaxed
+            ${message.mediaType === 'audio'
+              ? ''
+              : `overflow-hidden ${isOwn
+                  ? 'bg-accent text-white rounded-br-md'
+                  : 'bg-input text-text-primary rounded-bl-md'
+                }`
             }
-            ${message.mediaUrl && !message.text ? '' : ''}
           `}>
             {/* Contenido multimedia */}
             {message.mediaUrl && (
-              <div className={message.text ? 'p-2 pb-0' : 'p-2'}>
+              <div className={message.text ? 'p-2 pb-0' : message.mediaType === 'audio' ? '' : 'p-2'}>
                 <MediaContent message={message} isOwn={isOwn} />
               </div>
             )}
