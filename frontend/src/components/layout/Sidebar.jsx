@@ -187,7 +187,19 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
                   </div>
                   <div className="flex items-center justify-between gap-1 mt-0.5">
                     <span className="text-xs text-text-muted truncate">
-                      {conv.lastMessage?.text || 'Inicia la conversación...'}
+                      {conv.lastMessage
+                        ? conv.lastMessage.mediaType === 'image' && conv.lastMessage.mediaMimeType === 'image/gif'
+                          ? '🎬 GIF'
+                          : conv.lastMessage.mediaType === 'image'
+                          ? '📷 Foto'
+                          : conv.lastMessage.mediaType === 'video'
+                          ? '🎥 Video'
+                          : conv.lastMessage.mediaType === 'audio'
+                          ? '🎤 Audio'
+                          : conv.lastMessage.mediaType === 'document'
+                          ? '📄 Archivo'
+                          : conv.lastMessage.text || 'Inicia la conversación...'
+                        : 'Inicia la conversación...'}
                     </span>
                     {unread > 0 && (
                       <span className="min-w-[20px] h-[20px] bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">
