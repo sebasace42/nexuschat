@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
 import Avatar from '../ui/Avatar';
@@ -37,6 +37,125 @@ const formatSize = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+// ── Reproductor de audio estilo WhatsApp ─────────────────────────
+const AudioPlayer = ({ src, isOwn }) => {
+  const audioRef              = useRef(null);
+  const [playing,  setPlaying]  = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [current,  setCurrent]  = useState(0);
+
+  const fmt = (s) => {
+    if (!s || isNaN(s)) return '0:00';
+    const m   = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  };
+
+  const togglePlay = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else         { a.play();  setPlaying(true);  }
+  };
+
+  const handleSeek = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct  = (e.clientX - rect.left) / rect.width;
+    const a    = audioRef.current;
+    if (a && a.duration) {
+      a.currentTime = pct * a.duration;
+      setProgress(pct * 100);
+    }
+  };
+
+  // Barras de onda decorativas (estilo WhatsApp)
+  const bars = [3,5,8,5,9,6,4,7,9,5,8,4,6,9,5,7,4,8,6,9,5,4,7,8,5,6,9,4,7,5];
+
+  return (
+    <div className={`
+      flex items-center gap-2.5 px-3 py-2.5 rounded-2xl
+      min-w-[220px] max-w-[260px] w-full
+      ${isOwn ? 'bg-white/10' : 'bg-white/5'}
+    `}>
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={(e) => {
+          const a = e.target;
+          setCurrent(a.currentTime);
+          setProgress(a.duration ? (a.currentTime / a.duration) * 100 : 0);
+        }}
+        onLoadedMetadata={(e) => setDuration(e.target.duration)}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrent(0); }}
+      />
+
+      {/* Botón play/pause */}
+      <button
+        onClick={togglePlay}
+        className={`
+          w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
+          transition-colors
+          ${isOwn ? 'bg-white/25 hover:bg-white/35' : 'bg-white/15 hover:bg-white/25'}
+        `}
+      >
+        {playing ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
+            <polygon points="6 3 20 12 6 21 6 3"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Onda + progreso */}
+      <div className="flex-1 flex flex-col gap-1.5">
+        {/* Barras de onda */}
+        <div
+          className="relative flex items-end gap-[2px] h-8 cursor-pointer"
+          onClick={handleSeek}
+        >
+          {bars.map((h, i) => {
+            const pct     = (i / bars.length) * 100;
+            const isPlayed = pct <= progress;
+            return (
+              <div
+                key={i}
+                style={{ height: `${h * 3}px` }}
+                className={`
+                  flex-1 rounded-full transition-colors
+                  ${isPlayed
+                    ? isOwn ? 'bg-white/80' : 'bg-accent'
+                    : isOwn ? 'bg-white/30' : 'bg-white/25'
+                  }
+                `}
+              />
+            );
+          })}
+        </div>
+
+        {/* Tiempo */}
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] text-white/60 font-mono">
+            {playing || current > 0 ? fmt(current) : fmt(duration)}
+          </span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className="text-white/30">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Componente de contenido multimedia ───────────────────────────
 const MediaContent = ({ message, isOwn }) => {
   const { mediaType, mediaUrl, mediaName, mediaSize } = message;
@@ -66,9 +185,7 @@ const MediaContent = ({ message, isOwn }) => {
   }
 
   if (mediaType === 'audio') {
-    return (
-      <audio src={mediaUrl} controls className="w-full max-w-[240px] h-10" />
-    );
+    return <AudioPlayer src={mediaUrl} isOwn={isOwn} />;
   }
 
   // Documento / archivo genérico
