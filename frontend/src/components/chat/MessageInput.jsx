@@ -19,6 +19,7 @@ const MessageInput = ({ conversationId, disabled }) => {
   const typingRef     = useRef(null);
   const fileInputRef  = useRef(null);
   const imageInputRef = useRef(null);
+  const gifButtonRef  = useRef(null);
 
   // ── Auto-resize textarea ──────────────────────────────────────
   useEffect(() => {
@@ -282,6 +283,7 @@ const MessageInput = ({ conversationId, disabled }) => {
             {/* Botón GIF */}
             <div className="relative">
               <button
+                ref={gifButtonRef}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowGif((v) => !v);
@@ -304,6 +306,7 @@ const MessageInput = ({ conversationId, disabled }) => {
                 <GifPicker
                   onSelect={sendGif}
                   onClose={() => setShowGif(false)}
+                  anchorRef={gifButtonRef}
                 />
               )}
             </div>
