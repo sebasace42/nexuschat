@@ -100,4 +100,40 @@ router.post('/gif', protect, async (req, res) => {
   }
 });
 
+// POST /api/upload/sticker
+// Guarda un Sticker de GIPHY como mensaje
+router.post('/sticker', protect, async (req, res) => {
+  try {
+    const { conversationId, gifUrl } = req.body;
+
+    if (!conversationId || !gifUrl)
+      return res.status(400).json({ message: 'conversationId y gifUrl son requeridos' });
+
+    let message = await Message.create({
+      conversation:  conversationId,
+      sender:        req.user._id,
+      text:          '',
+      readBy:        [req.user._id],
+      status:        'sent',
+      mediaUrl:      gifUrl,
+      mediaType:     'image',
+      mediaName:     'Sticker',
+      mediaMimeType: 'image/gif',
+    });
+
+    message = await message.populate('sender', 'username avatarColor');
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: message._id,
+      updatedAt:   new Date(),
+    });
+
+    res.status(201).json(message);
+
+  } catch (err) {
+    console.error('Error guardando sticker:', err);
+    res.status(500).json({ message: err.message || 'Error del servidor' });
+  }
+});
+
 module.exports = router;

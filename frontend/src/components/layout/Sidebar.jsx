@@ -188,7 +188,9 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
                   <div className="flex items-center justify-between gap-1 mt-0.5">
                     <span className="text-xs text-text-muted truncate">
                       {conv.lastMessage
-                        ? conv.lastMessage.mediaType === 'image' && conv.lastMessage.mediaMimeType === 'image/gif'
+                        ? conv.lastMessage.mediaName === 'Sticker'
+                          ? '🎭 Sticker'
+                          : conv.lastMessage.mediaType === 'image' && conv.lastMessage.mediaMimeType === 'image/gif'
                           ? '🎬 GIF'
                           : conv.lastMessage.mediaType === 'image'
                           ? '📷 Foto'

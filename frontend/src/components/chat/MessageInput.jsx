@@ -1,15 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
-import EmojiPicker   from './EmojiPicker';
-import GifPicker     from './GifPicker';
+import MediaPicker   from './MediaPicker';
 import VoiceRecorder from './VoiceRecorder';
 
 const MessageInput = ({ conversationId, disabled }) => {
   const { socket }                = useSocket();
   const [text,        setText]        = useState('');
-  const [showEmoji,   setShowEmoji]   = useState(false);
-  const [showGif,     setShowGif]     = useState(false);
+  const [showPicker,  setShowPicker]  = useState(false);
   const [showVoice,   setShowVoice]   = useState(false);
   const [uploading,   setUploading]   = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -19,7 +17,7 @@ const MessageInput = ({ conversationId, disabled }) => {
   const typingRef     = useRef(null);
   const fileInputRef  = useRef(null);
   const imageInputRef = useRef(null);
-  const gifButtonRef  = useRef(null);
+  const pickerButtonRef = useRef(null);
 
   // ── Auto-resize textarea ──────────────────────────────────────
   useEffect(() => {
@@ -90,7 +88,7 @@ const MessageInput = ({ conversationId, disabled }) => {
   // ── Enviar GIF desde GIPHY ────────────────────────────────────
   const sendGif = async (gifUrl) => {
     if (!gifUrl || !conversationId || disabled) return;
-    setShowGif(false);
+    setShowPicker(false);
     try {
       const { data: message } = await api.post('/upload/gif', {
         conversationId,
@@ -99,6 +97,21 @@ const MessageInput = ({ conversationId, disabled }) => {
       socket?.emit('message:new_media', { message, conversationId });
     } catch (err) {
       console.error('Error enviando GIF:', err);
+    }
+  };
+
+  // ── Enviar Sticker (igual que GIF, usa misma ruta) ────────────
+  const sendSticker = async (stickerUrl) => {
+    if (!stickerUrl || !conversationId || disabled) return;
+    setShowPicker(false);
+    try {
+      const { data: message } = await api.post('/upload/sticker', {
+        conversationId,
+        gifUrl: stickerUrl,
+      });
+      socket?.emit('message:new_media', { message, conversationId });
+    } catch (err) {
+      console.error('Error enviando sticker:', err);
     }
   };
 
@@ -280,33 +293,34 @@ const MessageInput = ({ conversationId, disabled }) => {
               </svg>
             </button>
 
-            {/* Botón GIF */}
+            {/* Botón MediaPicker (Emoji + GIF + Stickers) */}
             <div className="relative">
               <button
-                ref={gifButtonRef}
+                ref={pickerButtonRef}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowGif((v) => !v);
-                  setShowEmoji(false);
+                  setShowPicker((v) => !v);
                 }}
                 disabled={disabled}
-                title="Enviar GIF"
+                title="Emojis, GIFs y Stickers"
                 className={`
                   w-7 h-7 rounded-lg flex items-center justify-center
-                  text-[11px] font-bold transition-colors disabled:opacity-40
-                  ${showGif
-                    ? 'bg-accent text-white'
+                  text-base transition-colors disabled:opacity-40
+                  ${showPicker
+                    ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:text-accent-bright hover:bg-hover'
                   }
                 `}
               >
-                GIF
+                {showPicker ? '🔽' : '😊'}
               </button>
-              {showGif && (
-                <GifPicker
-                  onSelect={sendGif}
-                  onClose={() => setShowGif(false)}
-                  anchorRef={gifButtonRef}
+              {showPicker && (
+                <MediaPicker
+                  onSelectEmoji={(e) => setText((p) => p + e)}
+                  onSelectGif={sendGif}
+                  onSelectSticker={sendSticker}
+                  onClose={() => setShowPicker(false)}
+                  anchorRef={pickerButtonRef}
                 />
               )}
             </div>
@@ -328,27 +342,8 @@ const MessageInput = ({ conversationId, disabled }) => {
             >&lt;/&gt;</button>
           </div>
 
-          {/* ── Área textarea + emoji + micrófono/enviar ── */}
+          {/* ── Área textarea + enviar ── */}
           <div className="flex items-end gap-2 px-3 py-2.5">
-
-            {/* Emoji picker */}
-            <div className="relative flex-shrink-0">
-              <button
-                onClick={() => {
-                  setShowEmoji((v) => !v);
-                  setShowGif(false);
-                }}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors"
-              >
-                😊
-              </button>
-              {showEmoji && (
-                <EmojiPicker
-                  onSelect={(e) => setText((p) => p + e)}
-                  onClose={() => setShowEmoji(false)}
-                />
-              )}
-            </div>
 
             {/* Textarea */}
             <textarea
