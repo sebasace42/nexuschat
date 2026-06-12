@@ -44,6 +44,28 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     return () => socket.off('conversation:updated', handler);
   }, [socket, selectedConv, user]);
 
+  // Escuchar el evento en el Sidebar cuando se elimina un chat completo
+  useEffect(() => {
+    if (!socket) return;
+
+    const onConvDeleted = ({ conversationId }) => {
+      setConversations((prev) =>
+        prev.filter((c) => c._id !== conversationId)
+      );
+
+      // Si la conversación eliminada es la que está abierta, deseleccionarla
+      if (selectedConv?._id === conversationId) {
+        onSelectConversation(null);
+      }
+    };
+
+    socket.on('conversation:deleted', onConvDeleted);
+
+    return () => {
+      socket.off('conversation:deleted', onConvDeleted);
+    };
+  }, [socket, selectedConv, onSelectConversation]);
+
   const fetchConversations = async () => {
     try {
       const { data } = await api.get('/conversations');
@@ -215,13 +237,7 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
           })}
         </div>
 
-        {/* ── ZONA 3: Barra de usuario inferior ──
-         *
-         * Esta barra siempre está al fondo del sidebar.
-         * En móvil se ve grande y cómoda para tocar.
-         * En PC se ve compacta.
-         * flex-shrink-0 evita que desaparezca.
-         */}
+        {/* ── ZONA 3: Barra de usuario inferior ── */}
         <div className="flex-shrink-0 border-t border-white/5 bg-deep">
           <div className="flex items-center gap-3 px-4 py-3">
 

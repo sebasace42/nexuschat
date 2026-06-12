@@ -7,6 +7,7 @@ import MessageInput  from './MessageInput';
 import Avatar        from '../ui/Avatar';
 import StatusDot     from '../ui/StatusDot';
 import { requestNotificationPermission, showIncomingMessageNotification } from '../../utils/notifications';
+import DeleteChatModal from '../modals/DeleteChatModal';
 
 const ChatArea = ({ conversation, onBack }) => {
   const { user }                = useAuth();
@@ -19,6 +20,9 @@ const ChatArea = ({ conversation, onBack }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const bottomRef = useRef(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showOptions,     setShowOptions]     = useState(false);
+  const [deletingChat,    setDeletingChat]    = useState(false);
 
   const other         = conversation?.participants?.find((p) => p._id !== user._id);
   const isOtherOnline = onlineUsers.includes(other?._id);
@@ -67,6 +71,31 @@ const ChatArea = ({ conversation, onBack }) => {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, page]);
+
+  // Función para eliminar el chat
+  const handleDeleteChat = async (deleteMedia) => {
+    setDeletingChat(true);
+    try {
+      await api.delete(`/conversations/${conversation._id}`, {
+        data: { deleteMedia },
+      });
+
+      // Notificar al sidebar que la conversación fue eliminada
+      socket?.emit('conversation:delete', {
+        conversationId: conversation._id,
+      });
+
+      // Volver al sidebar
+      onBack();
+
+    } catch (err) {
+      console.error('Error eliminando chat:', err);
+      alert('No se pudo eliminar el chat');
+    } finally {
+      setDeletingChat(false);
+      setShowDeleteModal(false);
+    }
+  };
 
   // Todos los eventos del socket en un solo useEffect
   useEffect(() => {
@@ -117,8 +146,6 @@ const ChatArea = ({ conversation, onBack }) => {
     };
 
     // Mensaje eliminado en tiempo real
-    // Cuando alguien elimina un mensaje, este evento
-    // llega a TODOS en la sala y filtra el mensaje del array
     const onDeleted = ({ messageId }) => {
       setMessages((prev) => prev.filter((m) => m._id !== messageId));
     };
@@ -166,8 +193,6 @@ const ChatArea = ({ conversation, onBack }) => {
   };
 
   // Eliminar mensaje del estado local inmediatamente
-  // Se llama desde MessageBubble después de que
-  // el backend confirma la eliminación
   const handleDeleteMessage = (messageId) => {
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
@@ -237,6 +262,57 @@ const ChatArea = ({ conversation, onBack }) => {
               : <span className="text-text-muted">Desconectado</span>
             }
           </p>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="relative">
+            <button
+              onClick={() => setShowOptions((v) => !v)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-hover transition-colors"
+              title="Opciones"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5"  r="1.5"/>
+                <circle cx="12" cy="12" r="1.5"/>
+                <circle cx="12" cy="19" r="1.5"/>
+              </svg>
+            </button>
+
+            {showOptions && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowOptions(false)}
+                />
+                <div className="
+                  absolute top-full right-0 mt-1 z-50
+                  bg-panel border border-white/10
+                  rounded-xl shadow-2xl overflow-hidden
+                  min-w-[180px]
+                ">
+                  <button
+                    onClick={() => {
+                      setShowOptions(false);
+                      setShowDeleteModal(true);
+                    }}
+                    className="
+                      w-full flex items-center gap-3 px-4 py-3
+                      text-accent-red text-sm hover:bg-accent-red/10
+                      active:bg-accent-red/20 transition-colors
+                    "
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                      <path d="M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/>
+                    </svg>
+                    Eliminar chat
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -349,6 +425,16 @@ const ChatArea = ({ conversation, onBack }) => {
       <div className="flex-shrink-0">
         <MessageInput conversationId={conversation._id} />
       </div>
+
+      {/* Modal eliminar chat */}
+      {showDeleteModal && (
+        <DeleteChatModal
+          contactName={other?.username}
+          isDeleting={deletingChat}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleDeleteChat}
+        />
+      )}
 
     </div>
   );

@@ -78,4 +78,71 @@ router.get('/:id/messages', protect, async (req, res) => {
   }
 });
 
+const { cloudinary } = require('../config/cloudinary');
+
+// DELETE /api/conversations/:id
+// Elimina toda la conversación y opcionalmente los archivos multimedia
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    const { deleteMedia } = req.body;
+    const conversationId = req.params.id;
+
+    // Verificar que el usuario es participante
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversación no encontrada' });
+    }
+
+    const isParticipant = conversation.participants
+      .some((p) => p.toString() === req.user._id.toString());
+
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'No tienes acceso a esta conversación' });
+    }
+
+    // Si el usuario marcó "eliminar multimedia", borrar archivos de Cloudinary
+    if (deleteMedia) {
+      const mediaMessages = await Message.find({
+        conversation: conversationId,
+        mediaPublicId: { $ne: null },
+      });
+
+      // Eliminar en batches de 10 para no saturar la API
+      const batches = [];
+      for (let i = 0; i < mediaMessages.length; i += 10) {
+        batches.push(mediaMessages.slice(i, i + 10));
+      }
+
+      for (const batch of batches) {
+        await Promise.allSettled(
+          batch.map((msg) => {
+            const resourceType = msg.mediaType === 'image' ? 'image'
+              : msg.mediaType === 'document' ? 'raw'
+              : 'video';
+            return cloudinary.uploader.destroy(msg.mediaPublicId, {
+              resource_type: resourceType,
+            });
+          })
+        );
+      }
+    }
+
+    // Eliminar todos los mensajes de la conversación
+    await Message.deleteMany({ conversation: conversationId });
+
+    // Eliminar la conversación
+    await Conversation.findByIdAndDelete(conversationId);
+
+    res.json({
+      message: 'Chat eliminado correctamente',
+      conversationId,
+      mediaDeleted: deleteMedia || false,
+    });
+
+  } catch (err) {
+    console.error('Error eliminando conversación:', err);
+    res.status(500).json({ message: 'Error del servidor', error: err.message });
+  }
+});
+
 module.exports = router;

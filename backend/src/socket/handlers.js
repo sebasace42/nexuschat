@@ -37,6 +37,11 @@ socket.on('message:delete', async ({ messageId, conversationId }) => {
       ids.forEach((id) => socket.join(id));
     });
 
+    // Escuchar cuando un usuario elimina la conversación completa y avisar a la sala
+    socket.on('conversation:delete', ({ conversationId }) => {
+      io.to(conversationId).emit('conversation:deleted', { conversationId });
+    });
+
     socket.on('message:send', async ({ conversationId, text }) => {
       if (!text?.trim()) return;
       try {
