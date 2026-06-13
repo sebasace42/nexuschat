@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../api/axios';
 import { useAuth }   from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import Avatar    from '../ui/Avatar';
 import StatusDot from '../ui/StatusDot';
-import NewChatModal from '../modals/NewChatModal';
+import NewChatModal    from '../modals/NewChatModal';
+import DeleteChatModal from '../modals/DeleteChatModal';
 
 const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const { user }                = useAuth();
@@ -12,6 +13,10 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const [conversations, setConversations] = useState([]);
   const [showNewChat,   setShowNewChat]   = useState(false);
   const [activeTab,     setActiveTab]     = useState('all');
+  const [deleteModal,   setDeleteModal]   = useState(null);  // conv a eliminar
+  const [deleting,      setDeleting]      = useState(false);
+  const [menuConvId,    setMenuConvId]    = useState(null);  // menú abierto
+  const longPressRef = useRef(null);
 
   useEffect(() => { if (user) fetchConversations(); }, [user]);
 
@@ -84,6 +89,36 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
 
   const getOther = (conv) =>
     conv.participants.find((p) => p._id !== user._id) || conv.participants[0];
+
+  // ── Eliminar conversación (solo para el usuario actual) ────────
+  const handleDeleteConversation = async (deleteMedia) => {
+    if (!deleteModal) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/conversations/${deleteModal._id}`, {
+        data: { deleteMedia },
+      });
+      setConversations((prev) => prev.filter((c) => c._id !== deleteModal._id));
+      if (selectedConv?._id === deleteModal._id) {
+        onSelectConversation(null);
+      }
+      setDeleteModal(null);
+    } catch (err) {
+      console.error('Error eliminando conversación:', err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ── Long press para móvil ──────────────────────────────────────
+  const handleTouchStart = (convId) => {
+    longPressRef.current = setTimeout(() => {
+      setMenuConvId(convId);
+    }, 500);
+  };
+  const handleTouchEnd = () => {
+    clearTimeout(longPressRef.current);
+  };
 
   const formatTime = (d) => {
     if (!d) return '';
@@ -181,58 +216,95 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
             const unread   = conv.unreadCount?.[user._id] || 0;
             const isOnline = onlineUsers.includes(other?._id);
             const isActive = selectedConv?._id === conv._id;
+            const menuOpen = menuConvId === conv._id;
 
             return (
-              <button
-                key={conv._id}
-                onClick={() => handleSelect(conv)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-0.5 text-left transition-colors ${
-                  isActive ? 'bg-active' : 'hover:bg-hover'
-                }`}
-              >
-                <div className="relative flex-shrink-0">
-                  <Avatar user={other} size={42} />
-                  <StatusDot isOnline={isOnline} size={12} borderColor="#13141a" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className={`text-sm font-medium truncate ${
-                      isActive ? 'text-white' : 'text-text-primary'
-                    }`}>
-                      {other?.username || 'Usuario'}
-                    </span>
-                    {conv.lastMessage && (
-                      <span className="text-xs text-text-muted flex-shrink-0">
-                        {formatTime(conv.updatedAt)}
-                      </span>
-                    )}
+              <div key={conv._id} className="relative group/conv">
+
+                {/* Overlay para cerrar menú */}
+                {menuOpen && (
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMenuConvId(null)}
+                  />
+                )}
+
+                <button
+                  onClick={() => { handleSelect(conv); setMenuConvId(null); }}
+                  onContextMenu={(e) => { e.preventDefault(); setMenuConvId(menuOpen ? null : conv._id); }}
+                  onTouchStart={() => handleTouchStart(conv._id)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchEnd}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-0.5 text-left transition-colors ${
+                    isActive ? 'bg-active' : 'hover:bg-hover'
+                  } ${menuOpen ? 'bg-hover' : ''}`}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Avatar user={other} size={42} />
+                    <StatusDot isOnline={isOnline} size={12} borderColor="#13141a" />
                   </div>
-                  <div className="flex items-center justify-between gap-1 mt-0.5">
-                    <span className="text-xs text-text-muted truncate">
-                      {conv.lastMessage
-                        ? conv.lastMessage.mediaName === 'Sticker'
-                          ? '🎭 Sticker'
-                          : conv.lastMessage.mediaType === 'image' && conv.lastMessage.mediaMimeType === 'image/gif'
-                          ? '🎬 GIF'
-                          : conv.lastMessage.mediaType === 'image'
-                          ? '📷 Foto'
-                          : conv.lastMessage.mediaType === 'video'
-                          ? '🎥 Video'
-                          : conv.lastMessage.mediaType === 'audio'
-                          ? '🎤 Audio'
-                          : conv.lastMessage.mediaType === 'document'
-                          ? '📄 Archivo'
-                          : conv.lastMessage.text || 'Inicia la conversación...'
-                        : 'Inicia la conversación...'}
-                    </span>
-                    {unread > 0 && (
-                      <span className="min-w-[20px] h-[20px] bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">
-                        {unread > 99 ? '99+' : unread}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={`text-sm font-medium truncate ${
+                        isActive ? 'text-white' : 'text-text-primary'
+                      }`}>
+                        {other?.username || 'Usuario'}
                       </span>
-                    )}
+                      {conv.lastMessage && (
+                        <span className="text-xs text-text-muted flex-shrink-0">
+                          {formatTime(conv.updatedAt)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <span className="text-xs text-text-muted truncate">
+                        {conv.lastMessage
+                          ? conv.lastMessage.mediaName === 'Sticker'
+                            ? '🎭 Sticker'
+                            : conv.lastMessage.mediaType === 'image' && conv.lastMessage.mediaMimeType === 'image/gif'
+                            ? '🎬 GIF'
+                            : conv.lastMessage.mediaType === 'image'
+                            ? '📷 Foto'
+                            : conv.lastMessage.mediaType === 'video'
+                            ? '🎥 Video'
+                            : conv.lastMessage.mediaType === 'audio'
+                            ? '🎤 Audio'
+                            : conv.lastMessage.mediaType === 'document'
+                            ? '📄 Archivo'
+                            : conv.lastMessage.text || 'Inicia la conversación...'
+                          : 'Inicia la conversación...'}
+                      </span>
+                      {unread > 0 && (
+                        <span className="min-w-[20px] h-[20px] bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+
+                {/* Menú contextual */}
+                {menuOpen && (
+                  <div className="absolute right-2 top-12 z-50 bg-panel border border-white/10 rounded-xl shadow-2xl overflow-hidden min-w-[180px]">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteModal(conv);
+                        setMenuConvId(null);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-accent-red text-sm hover:bg-accent-red/10 transition-colors"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/>
+                      </svg>
+                      Eliminar chat
+                    </button>
+                  </div>
+                )}
+
+              </div>
             );
           })}
         </div>
@@ -301,6 +373,16 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
             );
             handleSelect(conv);
           }}
+        />
+      )}
+
+      {/* Modal eliminar chat */}
+      {deleteModal && (
+        <DeleteChatModal
+          contactName={getOther(deleteModal)?.username ?? 'este chat'}
+          isDeleting={deleting}
+          onClose={() => setDeleteModal(null)}
+          onConfirm={handleDeleteConversation}
         />
       )}
     </>

@@ -9,10 +9,13 @@ router.get('/', protect, async (req, res) => {
   try {
     const conversations = await Conversation.find({
       participants: req.user._id,
+      // Solo mostrar conversaciones que NO están ocultas para este usuario
+      hiddenBy: { $ne: req.user._id },
     })
       .populate('participants', '-password')
       .populate('lastMessage')
       .sort({ updatedAt: -1 });
+
     res.json(conversations);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -81,42 +84,62 @@ router.get('/:id/messages', protect, async (req, res) => {
 const { cloudinary } = require('../config/cloudinary');
 
 // DELETE /api/conversations/:id
-// Elimina toda la conversación y opcionalmente los archivos multimedia
+// NO borra la conversación — la oculta solo para este usuario
 router.delete('/:id', protect, async (req, res) => {
   try {
     const { deleteMedia } = req.body;
-    const conversationId = req.params.id;
+    const conversationId  = req.params.id;
+    const userId          = req.user._id;
 
-    // Verificar que el usuario es participante
+    // Verificar que existe y que el usuario es participante
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
       return res.status(404).json({ message: 'Conversación no encontrada' });
     }
 
     const isParticipant = conversation.participants
-      .some((p) => p.toString() === req.user._id.toString());
+      .some((p) => p.toString() === userId.toString());
 
     if (!isParticipant) {
       return res.status(403).json({ message: 'No tienes acceso a esta conversación' });
     }
 
-    // Si el usuario marcó "eliminar multimedia", borrar archivos de Cloudinary
+    // Configurar query de actualización dinámica usando $addToSet
+    const updateQuery = {
+      $addToSet: { hiddenBy: userId }
+    };
+
     if (deleteMedia) {
-      const mediaMessages = await Message.find({
+      updateQuery.$addToSet.deletedMediaBy = userId;
+    }
+
+    // Actualizar la conversación y obtener el estado nuevo con { new: true }
+    const updatedConversation = await Conversation.findByIdAndUpdate(
+      conversationId,
+      updateQuery,
+      { new: true }
+    );
+
+    let mediaRealmenteEliminada = false;
+
+    // Verificar si TODOS los participantes solicitaron borrar multimedia
+    const todosBorraronMedia = updatedConversation.participants.length === updatedConversation.deletedMediaBy.length;
+
+    if (deleteMedia && todosBorraronMedia) {
+      mediaRealmenteEliminada = true;
+
+      // Buscar mensajes con archivos de toda la conversación
+      const allMediaMessages = await Message.find({
         conversation: conversationId,
         mediaPublicId: { $ne: null },
       });
 
-      // Eliminar en batches de 10 para no saturar la API
-      const batches = [];
-      for (let i = 0; i < mediaMessages.length; i += 10) {
-        batches.push(mediaMessages.slice(i, i + 10));
-      }
-
-      for (const batch of batches) {
+      // Eliminar de Cloudinary en batches de 10
+      for (let i = 0; i < allMediaMessages.length; i += 10) {
+        const batch = allMediaMessages.slice(i, i + 10);
         await Promise.allSettled(
           batch.map((msg) => {
-            const resourceType = msg.mediaType === 'image' ? 'image'
+            const resourceType = msg.mediaType === 'image'    ? 'image'
               : msg.mediaType === 'document' ? 'raw'
               : 'video';
             return cloudinary.uploader.destroy(msg.mediaPublicId, {
@@ -127,20 +150,14 @@ router.delete('/:id', protect, async (req, res) => {
       }
     }
 
-    // Eliminar todos los mensajes de la conversación
-    await Message.deleteMany({ conversation: conversationId });
-
-    // Eliminar la conversación
-    await Conversation.findByIdAndDelete(conversationId);
-
     res.json({
-      message: 'Chat eliminado correctamente',
+      message:      'Chat eliminado de tu lista',
       conversationId,
-      mediaDeleted: deleteMedia || false,
+      mediaDeleted: mediaRealmenteEliminada,
     });
 
   } catch (err) {
-    console.error('Error eliminando conversación:', err);
+    console.error('Error ocultando conversación:', err);
     res.status(500).json({ message: 'Error del servidor', error: err.message });
   }
 });
