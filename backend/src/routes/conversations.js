@@ -84,7 +84,7 @@ router.get('/:id/messages', protect, async (req, res) => {
 const { cloudinary } = require('../config/cloudinary');
 
 // DELETE /api/conversations/:id
-// NO borra la conversación — la oculta solo para este usuario
+// NO borra la conversación — la oculta solo para este usuario (comportamiento WhatsApp)
 router.delete('/:id', protect, async (req, res) => {
   try {
     const { deleteMedia } = req.body;
@@ -106,7 +106,7 @@ router.delete('/:id', protect, async (req, res) => {
 
     // Configurar query de actualización dinámica usando $addToSet
     const updateQuery = {
-      $addToSet: { hiddenBy: userId }
+      $addToSet: { hiddenBy: userId },
     };
 
     if (deleteMedia) {
@@ -123,7 +123,8 @@ router.delete('/:id', protect, async (req, res) => {
     let mediaRealmenteEliminada = false;
 
     // Verificar si TODOS los participantes solicitaron borrar multimedia
-    const todosBorraronMedia = updatedConversation.participants.length === updatedConversation.deletedMediaBy.length;
+    const todosBorraronMedia =
+      updatedConversation.participants.length === updatedConversation.deletedMediaBy.length;
 
     if (deleteMedia && todosBorraronMedia) {
       mediaRealmenteEliminada = true;
@@ -147,6 +148,38 @@ router.delete('/:id', protect, async (req, res) => {
             });
           })
         );
+      }
+    }
+
+    /*
+     * ─── CAMBIO CLAVE ────────────────────────────────────────────────────────
+     * El socket NO puede emitirse aquí porque routes no tiene acceso directo
+     * al objeto io. Hay dos patrones comunes para resolverlo:
+     *
+     * PATRÓN A (recomendado si usas app.set / req.app.get):
+     *   const io = req.app.get('io');
+     *   const socketId = req.app.get('userSockets')?.[userId.toString()];
+     *   if (socketId) io.to(socketId).emit('conversation:hidden', { conversationId });
+     *
+     * PATRÓN B (si exportas io desde otro módulo):
+     *   const { io, userSockets } = require('../socket');
+     *   const socketId = userSockets.get(userId.toString());
+     *   if (socketId) io.to(socketId).emit('conversation:hidden', { conversationId });
+     *
+     * En AMBOS casos el evento se emite SOLO al socket del usuario que eliminó,
+     * NO a toda la sala de la conversación.
+     * ─────────────────────────────────────────────────────────────────────────
+     */
+    const io          = req.app.get('io');
+    const userSockets = req.app.get('userSockets'); // Map<userId, socketId>
+
+    if (io && userSockets) {
+      const targetSocketId = userSockets.get(userId.toString());
+      if (targetSocketId) {
+        // Solo el usuario que eliminó recibe este evento
+        io.to(targetSocketId).emit('conversation:hidden', {
+          conversationId,
+        });
       }
     }
 

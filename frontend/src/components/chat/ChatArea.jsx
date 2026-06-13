@@ -72,7 +72,16 @@ const ChatArea = ({ conversation, onBack }) => {
     }
   }, [messages, page]);
 
-  // Función para eliminar el chat
+  /*
+   * ─── CAMBIO CLAVE ──────────────────────────────────────────────────────────
+   * handleDeleteChat ya NO emite conversation:delete por socket
+   * (ese evento llegaba a TODOS los participantes y borraba el chat del otro).
+   *
+   * El backend ahora emite conversation:hidden directamente al socket
+   * del usuario que eliminó, usando su socketId privado.
+   * ChatArea solo necesita cerrar el modal y volver al sidebar.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
   const handleDeleteChat = async (deleteMedia) => {
     setDeletingChat(true);
     try {
@@ -80,12 +89,8 @@ const ChatArea = ({ conversation, onBack }) => {
         data: { deleteMedia },
       });
 
-      // Notificar al sidebar que la conversación fue eliminada
-      socket?.emit('conversation:delete', {
-        conversationId: conversation._id,
-      });
-
-      // Volver al sidebar
+      // El backend ya se encarga de emitir conversation:hidden al socket
+      // de este usuario. Aquí solo navegamos de vuelta al sidebar.
       onBack();
 
     } catch (err) {
@@ -215,20 +220,15 @@ const ChatArea = ({ conversation, onBack }) => {
   }
 
   return (
-    <div
-      className="flex flex-col w-full bg-main overflow-hidden"
-      style={{ height: '100%' }}
-    >
+    <div className="flex-1 flex flex-col bg-main overflow-hidden">
 
-      {/* ══ TOPBAR ══ */}
-      <div
-        className="flex-shrink-0 flex items-center gap-2 px-3 border-b border-white/5 bg-main"
-        style={{ height: '56px', minHeight: '56px' }}
-      >
-        {/* Flecha volver — solo móvil */}
+      {/* ══ HEADER ══ */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 flex-shrink-0">
+
+        {/* Botón volver (solo móvil) */}
         <button
           onClick={onBack}
-          className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center text-white hover:bg-hover transition-colors flex-shrink-0 active:bg-active"
+          className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-hover transition-colors flex-shrink-0"
           aria-label="Volver"
         >
           <svg
@@ -346,7 +346,7 @@ const ChatArea = ({ conversation, onBack }) => {
           </label>
           <p className="mt-1 text-[11px] text-text-muted">
             {normalizedSearch
-              ? `${filteredMessages.length} resultado${filteredMessages.length === 1 ? '' : 's'} para “${searchTerm.trim()}”`
+              ? `${filteredMessages.length} resultado${filteredMessages.length === 1 ? '' : 's'} para "${searchTerm.trim()}"`
               : 'Busca mensajes dentro de esta conversación'}
           </p>
         </div>

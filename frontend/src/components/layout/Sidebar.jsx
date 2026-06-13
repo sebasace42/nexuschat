@@ -49,25 +49,35 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     return () => socket.off('conversation:updated', handler);
   }, [socket, selectedConv, user]);
 
-  // Escuchar el evento en el Sidebar cuando se elimina un chat completo
+  /*
+   * ─── CAMBIO CLAVE ──────────────────────────────────────────────────────────
+   * Antes escuchábamos 'conversation:deleted', que el backend emitía a TODOS
+   * los participantes de la sala → el chat desaparecía también para el otro.
+   *
+   * Ahora escuchamos 'conversation:hidden', que el backend emite SOLO al
+   * socket privado del usuario que eliminó. El otro participante nunca recibe
+   * este evento y su lista de conversaciones no se toca.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
   useEffect(() => {
     if (!socket) return;
 
-    const onConvDeleted = ({ conversationId }) => {
+    const onConvHidden = ({ conversationId }) => {
+      // Quitar la conversación solo de la lista de este usuario
       setConversations((prev) =>
         prev.filter((c) => c._id !== conversationId)
       );
 
-      // Si la conversación eliminada es la que está abierta, deseleccionarla
+      // Si estaba abierta, volver al estado sin conversación seleccionada
       if (selectedConv?._id === conversationId) {
         onSelectConversation(null);
       }
     };
 
-    socket.on('conversation:deleted', onConvDeleted);
+    socket.on('conversation:hidden', onConvHidden);
 
     return () => {
-      socket.off('conversation:deleted', onConvDeleted);
+      socket.off('conversation:hidden', onConvHidden);
     };
   }, [socket, selectedConv, onSelectConversation]);
 
@@ -98,6 +108,13 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
       await api.delete(`/conversations/${deleteModal._id}`, {
         data: { deleteMedia },
       });
+
+      /*
+       * El backend emite conversation:hidden al socket privado de este usuario.
+       * El useEffect de arriba lo recibe y limpia el estado.
+       * Igual limpiamos aquí de forma optimista para respuesta inmediata,
+       * en caso de que el socket tarde o no esté conectado.
+       */
       setConversations((prev) => prev.filter((c) => c._id !== deleteModal._id));
       if (selectedConv?._id === deleteModal._id) {
         onSelectConversation(null);
@@ -192,9 +209,9 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
 
         {/* ── ZONA 2: Lista de conversaciones ── */}
         <div className="flex-1 overflow-y-auto px-2 py-1">
+
           {filtered.length === 0 && (
-            <div className="text-center py-12 px-4">
-              <div className="text-4xl mb-3">💬</div>
+            <div className="flex flex-col items-center justify-center h-full text-center py-12 px-4">
               <p className="text-text-muted text-sm">
                 {activeTab === 'unread'
                   ? 'Sin mensajes no leídos'
@@ -333,7 +350,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
               className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-white hover:bg-hover transition-colors flex-shrink-0"
               title="Configuración"
             >
-              {/* Ícono engranaje SVG nativo */}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 6.34L4.93 4.93"/>
@@ -350,7 +366,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
               className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-accent-red hover:bg-accent-red/10 transition-colors flex-shrink-0"
               title="Cerrar sesión"
             >
-              {/* Ícono salir SVG nativo */}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
