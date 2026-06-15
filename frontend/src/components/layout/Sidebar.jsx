@@ -20,65 +20,89 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
 
   useEffect(() => { if (user) fetchConversations(); }, [user]);
 
+  // Unirse a todas las salas de socket al cargar o cambiar la lista
   useEffect(() => {
     if (!socket || conversations.length === 0) return;
     socket.emit('conversations:join', conversations.map((c) => c._id));
   }, [socket, conversations]);
 
+  // ─── NUEVO MENSAJE: actualiza lastMessage y badge ────────────────────────
+  // FIX: si la conv no existe localmente (fue ocultada) la reinserta con fetch
   useEffect(() => {
     if (!socket) return;
     const handler = ({ conversationId, lastMessage }) => {
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c._id !== conversationId) return c;
-          const isActive = selectedConv?._id === conversationId;
-          const cur = c.unreadCount?.[user._id] || 0;
-          return {
-            ...c,
-            lastMessage,
-            updatedAt: new Date().toISOString(),
-            unreadCount: {
-              ...c.unreadCount,
-              [user._id]: isActive ? 0 : cur + 1,
-            },
-          };
-        }).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-      );
+      setConversations((prev) => {
+        const exists = prev.some((c) => c._id === conversationId);
+
+        if (exists) {
+          return prev
+            .map((c) => {
+              if (c._id !== conversationId) return c;
+              const isActive = selectedConv?._id === conversationId;
+              const cur = c.unreadCount?.[user._id] || 0;
+              return {
+                ...c,
+                lastMessage,
+                updatedAt: new Date().toISOString(),
+                unreadCount: {
+                  ...c.unreadCount,
+                  [user._id]: isActive ? 0 : cur + 1,
+                },
+              };
+            })
+            .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        }
+
+        // La conv estaba oculta (borrada por este usuario) y el otro escribió:
+        // recuperarla desde el servidor y añadirla al sidebar
+        api.get(`/conversations/${conversationId}`)
+          .then(({ data }) => {
+            setConversations((latest) => {
+              if (latest.some((c) => c._id === conversationId)) return latest;
+              return [data, ...latest].sort(
+                (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+              );
+            });
+            socket.emit('conversations:join', [conversationId]);
+          })
+          .catch(console.error);
+
+        return prev;
+      });
     };
     socket.on('conversation:updated', handler);
     return () => socket.off('conversation:updated', handler);
   }, [socket, selectedConv, user]);
 
-  // Escuchar el evento en el Sidebar cuando se elimina un chat completo
+  // ─── CHAT OCULTO: solo para el usuario que eliminó ───────────────────────
+  // FIX: era 'conversation:deleted' (nombre viejo), ahora es 'conversation:hidden'
   useEffect(() => {
     if (!socket) return;
-
-    // Chat eliminado — solo para el usuario que lo eliminó
-    const onConvDeleted = ({ conversationId }) => {
+    const onConvHidden = ({ conversationId }) => {
       setConversations((prev) => prev.filter((c) => c._id !== conversationId));
-      if (selectedConv?._id === conversationId) {
-        onSelectConversation(null);
-      }
+      if (selectedConv?._id === conversationId) onSelectConversation(null);
     };
-
-    // Chat que reaparece porque el otro usuario envió un mensaje
-    const onConvRestore = ({ conversationId, conversation }) => {
-      if (!conversation) return;
-      setConversations((prev) => {
-        const exists = prev.find((c) => c._id === conversationId);
-        if (exists) return prev; // ya está visible
-        return [conversation, ...prev]; // añadir al inicio
-      });
-    };
-
-    socket.on('conversation:deleted', onConvDeleted);
-    socket.on('conversation:restore', onConvRestore);
-
-    return () => {
-      socket.off('conversation:deleted', onConvDeleted);
-      socket.off('conversation:restore', onConvRestore);
-    };
+    socket.on('conversation:hidden', onConvHidden);
+    return () => socket.off('conversation:hidden', onConvHidden);
   }, [socket, selectedConv, onSelectConversation]);
+
+  // ─── PERFIL ACTUALIZADO EN TIEMPO REAL ───────────────────────────────────
+  // Actualiza nombre/avatar del otro participante sin recargar la página
+  useEffect(() => {
+    if (!socket) return;
+    const onUserUpdated = ({ userId, username, avatarColor }) => {
+      setConversations((prev) =>
+        prev.map((conv) => ({
+          ...conv,
+          participants: conv.participants.map((p) =>
+            p._id === userId ? { ...p, username, avatarColor } : p
+          ),
+        }))
+      );
+    };
+    socket.on('user:updated', onUserUpdated);
+    return () => socket.off('user:updated', onUserUpdated);
+  }, [socket]);
 
   const fetchConversations = async () => {
     try {
@@ -99,7 +123,10 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const getOther = (conv) =>
     conv.participants.find((p) => p._id !== user._id) || conv.participants[0];
 
-  // ── Eliminar conversación solo para el usuario actual ──────────
+  // ─── ELIMINAR conversación (solo para el usuario actual) ─────────────────
+  // El backend emite conversation:hidden solo a este socket → el useEffect
+  // de arriba lo escucha y limpia el estado. La limpieza local de aquí abajo
+  // es optimista (respuesta inmediata sin esperar al socket).
   const handleDeleteConversation = async (deleteMedia) => {
     if (!deleteModal) return;
     setDeleting(true);
@@ -107,8 +134,9 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
       await api.delete(`/conversations/${deleteModal._id}`, {
         data: { deleteMedia },
       });
-      // El socket notifica solo a este usuario via conversation:delete
-      socket?.emit('conversation:delete', { conversationId: deleteModal._id });
+      // Limpieza optimista
+      setConversations((prev) => prev.filter((c) => c._id !== deleteModal._id));
+      if (selectedConv?._id === deleteModal._id) onSelectConversation(null);
       setDeleteModal(null);
     } catch (err) {
       console.error('Error eliminando conversación:', err);
@@ -117,11 +145,17 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     }
   };
 
-  // ── Long press para móvil (500ms) ─────────────────────────────
+  // ─── Long press (móvil) ───────────────────────────────────────────────────
+  // FIX: handleTouchEnd estaba fuera de la función — ahora correctamente dentro
   const handleTouchStart = (convId) => {
     longPressRef.current = setTimeout(() => setMenuConvId(convId), 500);
   };
-  const handleTouchEnd = () => clearTimeout(longPressRef.current);
+  const handleTouchEnd = () => {
+    clearTimeout(longPressRef.current);
+  };
+
+  // ─── Utilidades ──────────────────────────────────────────────────────────
+  const formatTime = (d) => {
     if (!d) return '';
     const date = new Date(d), now = new Date();
     const diff = (now - date) / 1000 / 60 / 60 / 24;
@@ -138,14 +172,9 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     (s, c) => s + (c.unreadCount?.[user._id] || 0), 0
   );
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/*
-       * El sidebar tiene 3 zonas:
-       * 1. Header (logo + botón nuevo chat)
-       * 2. Lista de conversaciones (flex-1, scrollea)
-       * 3. Barra de usuario inferior (fija abajo)
-       */}
       <aside className="w-full md:w-[240px] bg-deep flex flex-col border-r border-white/5 overflow-hidden flex-shrink-0 h-full">
 
         {/* ── ZONA 1: Header ── */}
@@ -171,7 +200,7 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <div className="flex gap-1 px-4 pt-3 pb-1 flex-shrink-0">
           {[['all', 'Todos'], ['unread', 'No leídos']].map(([val, label]) => (
             <button
@@ -193,9 +222,9 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
 
         {/* ── ZONA 2: Lista de conversaciones ── */}
         <div className="flex-1 overflow-y-auto px-2 py-1">
+
           {filtered.length === 0 && (
-            <div className="text-center py-12 px-4">
-              <div className="text-4xl mb-3">💬</div>
+            <div className="flex flex-col items-center justify-center h-full text-center py-12 px-4">
               <p className="text-text-muted text-sm">
                 {activeTab === 'unread'
                   ? 'Sin mensajes no leídos'
@@ -222,9 +251,11 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
             return (
               <div key={conv._id} className="relative group/conv">
 
-                {/* Overlay para cerrar menú al tocar fuera */}
                 {menuOpen && (
-                  <div className="fixed inset-0 z-40" onClick={() => setMenuConvId(null)} />
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMenuConvId(null)}
+                  />
                 )}
 
                 <button
@@ -281,7 +312,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
                   </div>
                 </button>
 
-                {/* Menú contextual */}
                 {menuOpen && (
                   <div className="absolute right-2 top-12 z-50 bg-panel border border-white/10 rounded-xl shadow-2xl overflow-hidden min-w-[180px]">
                     <button
@@ -311,13 +341,11 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
         <div className="flex-shrink-0 border-t border-white/5 bg-deep">
           <div className="flex items-center gap-3 px-4 py-3">
 
-            {/* Avatar del usuario con punto verde */}
             <div className="relative flex-shrink-0">
               <Avatar user={user} size={38} />
               <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-accent-green border-2 border-deep" />
             </div>
 
-            {/* Nombre y tag */}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate leading-tight">
                 {user?.username}
@@ -325,20 +353,17 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
               <p className="text-xs text-text-muted leading-tight">En línea</p>
             </div>
 
-            {/* Botón Configuración */}
             <button
               onClick={onOpenSettings}
               className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-white hover:bg-hover transition-colors flex-shrink-0"
               title="Configuración"
             >
-              {/* Ícono engranaje SVG nativo */}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 6.34L4.93 4.93"/>
               </svg>
             </button>
 
-            {/* Botón Cerrar sesión */}
             <button
               onClick={() => {
                 localStorage.removeItem('nexus_token');
@@ -348,7 +373,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
               className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-accent-red hover:bg-accent-red/10 transition-colors flex-shrink-0"
               title="Cerrar sesión"
             >
-              {/* Ícono salir SVG nativo */}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
@@ -361,7 +385,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
 
       </aside>
 
-      {/* Modal nuevo chat */}
       {showNewChat && (
         <NewChatModal
           onClose={() => setShowNewChat(false)}
@@ -374,7 +397,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
         />
       )}
 
-      {/* Modal eliminar chat */}
       {deleteModal && (
         <DeleteChatModal
           contactName={getOther(deleteModal)?.username ?? 'este chat'}
@@ -385,5 +407,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
       )}
     </>
   );
+};
 
 export default Sidebar;
