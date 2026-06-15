@@ -37,9 +37,13 @@ socket.on('message:delete', async ({ messageId, conversationId }) => {
       ids.forEach((id) => socket.join(id));
     });
 
-    // Escuchar cuando un usuario elimina la conversación completa y avisar a la sala
+    // Cuando un usuario elimina la conversación — solo notificar a ÉL mismo
+    // NO emitir a toda la sala para no afectar al otro usuario
     socket.on('conversation:delete', ({ conversationId }) => {
-      io.to(conversationId).emit('conversation:deleted', { conversationId });
+      const mySocketId = onlineUsers.get(socket.userId);
+      if (mySocketId) {
+        io.to(mySocketId).emit('conversation:deleted', { conversationId });
+      }
     });
 
     socket.on('message:send', async ({ conversationId, text }) => {
@@ -50,12 +54,19 @@ socket.on('message:delete', async ({ messageId, conversationId }) => {
           sender: socket.userId,
           text: text.trim(),
           readBy: [socket.userId],
+          status: 'sent',
         });
         message = await message.populate('sender', 'username avatarColor');
 
+        // Al enviar un mensaje, quitar hiddenBy para todos los participantes
+        // Así el chat reaparece en la lista de quien lo había ocultado
         const conversation = await Conversation.findByIdAndUpdate(
           conversationId,
-          { lastMessage: message._id, updatedAt: new Date() },
+          {
+            lastMessage: message._id,
+            updatedAt: new Date(),
+            $set: { hiddenBy: [] },  // ← reaparecer para todos
+          },
           { new: true }
         ).populate('participants', '-password');
 
@@ -68,9 +79,18 @@ socket.on('message:delete', async ({ messageId, conversationId }) => {
             $set: { [`unreadCount.${p._id}`]: cur + 1 },
           });
           const sid = onlineUsers.get(p._id.toString());
-          if (sid) io.to(sid).emit('conversation:updated', {
-            conversationId, lastMessage: message,
-          });
+          if (sid) {
+            // Enviar conversación completa para que reaparezca si estaba oculta
+            io.to(sid).emit('conversation:updated', {
+              conversationId, lastMessage: message,
+            });
+            io.to(sid).emit('conversation:restore', {
+              conversationId,
+              conversation: await Conversation.findById(conversationId)
+                .populate('participants', '-password')
+                .populate('lastMessage'),
+            });
+          }
         }
 
         io.to(conversationId).emit('message:new', { message, conversationId });
