@@ -5,38 +5,39 @@ const conversationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   }],
-  isGroup:     { type: Boolean, default: false },
-  groupName:   { type: String,  default: '' },
+  isGroup:   { type: Boolean, default: false },
+  groupName: { type: String,  default: '' },
   lastMessage: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Message',
     default: null,
   },
-  unreadCount: { type: Map, of: Number, default: {} },
+  unreadCount: { 
+    type: Map, 
+    of: Number, 
+    default: {} 
+  },
 
   /*
-   * NUEVO — hiddenBy
-   * Array de IDs de usuarios que ocultaron esta conversación.
-   * Si tu ID está aquí, no ves la conversación en tu sidebar.
-   * Si el otro usuario te escribe, tu ID se elimina del array
-   * y la conversación vuelve a aparecer.
+   * SISTEMA DE ELIMINACIÓN ESTILO WHATSAPP
+   * hiddenBy: array de userIds que ocultaron esta conversación.
    */
   hiddenBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   }],
 
-  /*
-   * NUEVO — deletedMediaBy
-   * Guarda qué usuarios eliminaron los archivos multimedia.
-   * Solo afecta a Cloudinary si TODOS los participantes
-   * han marcado deleteMedia.
-   */
-  deletedMediaBy: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  }],
+  deletedBefore: {
+    type: Map,
+    of:   Date,
+    default: {},
+  },
 
 }, { timestamps: true });
+
+// ÍNDICES PARA CONSULTAS EFICIENTES
+conversationSchema.index({ participants: 1 });
+conversationSchema.index({ updatedAt: -1 });
+conversationSchema.index({ hiddenBy: 1 });
 
 module.exports = mongoose.model('Conversation', conversationSchema);

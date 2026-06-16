@@ -18,6 +18,12 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const [menuConvId,    setMenuConvId]    = useState(null);
   const longPressRef = useRef(null);
 
+  // Guardar la referencia del chat seleccionado para evitar re-suscripciones del socket
+  const selectedConvRef = useRef(selectedConv);
+  useEffect(() => {
+    selectedConvRef.current = selectedConv;
+  }, [selectedConv]);
+
   useEffect(() => { if (user) fetchConversations(); }, [user]);
 
   // Unirse a todas las salas de socket al cargar o cambiar la lista
@@ -26,10 +32,10 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     socket.emit('conversations:join', conversations.map((c) => c._id));
   }, [socket, conversations]);
 
-  // ─── NUEVO MENSAJE: actualiza lastMessage y badge ────────────────────────
-  // FIX: si la conv no existe localmente (fue ocultada) la reinserta con fetch
+  // ─── NUEVO MENSAJE: actualiza lastMessage y badge sin romper el socket ─────
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !user?._id) return;
+
     const handler = ({ conversationId, lastMessage }) => {
       setConversations((prev) => {
         const exists = prev.some((c) => c._id === conversationId);
@@ -38,7 +44,8 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
           return prev
             .map((c) => {
               if (c._id !== conversationId) return c;
-              const isActive = selectedConv?._id === conversationId;
+              // Usamos la referencia para saber el estado real actual
+              const isActive = selectedConvRef.current?._id === conversationId;
               const cur = c.unreadCount?.[user._id] || 0;
               return {
                 ...c,
@@ -53,8 +60,7 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
             .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         }
 
-        // La conv estaba oculta (borrada por este usuario) y el otro escribió:
-        // recuperarla desde el servidor y añadirla al sidebar
+        // La conv estaba oculta y el otro escribió: recuperarla
         api.get(`/conversations/${conversationId}`)
           .then(({ data }) => {
             setConversations((latest) => {
@@ -70,24 +76,24 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
         return prev;
       });
     };
+
     socket.on('conversation:updated', handler);
     return () => socket.off('conversation:updated', handler);
-  }, [socket, selectedConv, user]);
+    // Dejamos solo user._id y socket para que no cree bucles infinitos de conexión/desconexión
+  }, [socket, user?._id]);
 
-  // ─── CHAT OCULTO: solo para el usuario que eliminó ───────────────────────
-  // FIX: era 'conversation:deleted' (nombre viejo), ahora es 'conversation:hidden'
+  // ─── CHAT OCULTO ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
     const onConvHidden = ({ conversationId }) => {
       setConversations((prev) => prev.filter((c) => c._id !== conversationId));
-      if (selectedConv?._id === conversationId) onSelectConversation(null);
+      if (selectedConvRef.current?._id === conversationId) onSelectConversation(null);
     };
     socket.on('conversation:hidden', onConvHidden);
     return () => socket.off('conversation:hidden', onConvHidden);
-  }, [socket, selectedConv, onSelectConversation]);
+  }, [socket, onSelectConversation]);
 
   // ─── PERFIL ACTUALIZADO EN TIEMPO REAL ───────────────────────────────────
-  // Actualiza nombre/avatar del otro participante sin recargar la página
   useEffect(() => {
     if (!socket) return;
     const onUserUpdated = ({ userId, username, avatarColor }) => {
@@ -123,10 +129,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const getOther = (conv) =>
     conv.participants.find((p) => p._id !== user._id) || conv.participants[0];
 
-  // ─── ELIMINAR conversación (solo para el usuario actual) ─────────────────
-  // El backend emite conversation:hidden solo a este socket → el useEffect
-  // de arriba lo escucha y limpia el estado. La limpieza local de aquí abajo
-  // es optimista (respuesta inmediata sin esperar al socket).
   const handleDeleteConversation = async (deleteMedia) => {
     if (!deleteModal) return;
     setDeleting(true);
@@ -134,7 +136,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
       await api.delete(`/conversations/${deleteModal._id}`, {
         data: { deleteMedia },
       });
-      // Limpieza optimista
       setConversations((prev) => prev.filter((c) => c._id !== deleteModal._id));
       if (selectedConv?._id === deleteModal._id) onSelectConversation(null);
       setDeleteModal(null);
@@ -145,8 +146,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     }
   };
 
-  // ─── Long press (móvil) ───────────────────────────────────────────────────
-  // FIX: handleTouchEnd estaba fuera de la función — ahora correctamente dentro
   const handleTouchStart = (convId) => {
     longPressRef.current = setTimeout(() => setMenuConvId(convId), 500);
   };
@@ -154,7 +153,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     clearTimeout(longPressRef.current);
   };
 
-  // ─── Utilidades ──────────────────────────────────────────────────────────
   const formatTime = (d) => {
     if (!d) return '';
     const date = new Date(d), now = new Date();
@@ -172,7 +170,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     (s, c) => s + (c.unreadCount?.[user._id] || 0), 0
   );
 
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <aside className="w-full md:w-[240px] bg-deep flex flex-col border-r border-white/5 overflow-hidden flex-shrink-0 h-full">

@@ -3,13 +3,26 @@ const Conversation = require('../models/Conversation');
 const Message      = require('../models/Message');
 const { protect }  = require('../middleware/auth');
 
+let cloudinary;
+try {
+  cloudinary = require('../config/cloudinary').cloudinary;
+} catch {
+  cloudinary = null;
+}
+
 const router = express.Router();
 
+// GET /api/conversations
+// Lista las conversaciones visibles para el usuario
 router.get('/', protect, async (req, res) => {
   try {
     const conversations = await Conversation.find({
       participants: req.user._id,
-      // Solo mostrar conversaciones que NO están ocultas para este usuario
+      /*
+       * Solo mostrar conversaciones donde el usuario
+       * NO está en hiddenBy.
+       * $ne = "not equal" / "not in array"
+       */
       hiddenBy: { $ne: req.user._id },
     })
       .populate('participants', '-password')
@@ -22,76 +35,110 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// POST /api/conversations
+// Crear o recuperar una conversación directa
 router.post('/', protect, async (req, res) => {
   const { recipientId } = req.body;
-  if (!recipientId)
+  if (!recipientId) {
     return res.status(400).json({ message: 'recipientId es requerido' });
+  }
+
   try {
-    let conversation = await Conversation.findOne({
-      isGroup: false,
+    /*
+     * Buscar conversación existente entre estos dos usuarios.
+     * Incluimos las ocultas porque si el usuario escribe de nuevo,
+     * debe retomar la conversación existente.
+     */
+    let conv = await Conversation.findOne({
+      isGroup:      false,
       participants: { $all: [req.user._id, recipientId], $size: 2 },
     })
       .populate('participants', '-password')
       .populate('lastMessage');
-    if (!conversation) {
-      conversation = await Conversation.create({
-        participants: [req.user._id, recipientId], isGroup: false,
+
+    if (!conv) {
+      conv = await Conversation.create({
+        participants: [req.user._id, recipientId],
+        isGroup:      false,
       });
-      conversation = await conversation.populate('participants', '-password');
+      conv = await conv.populate('participants', '-password');
+    } else {
+      /*
+       * Si la conversación existía pero estaba oculta para el usuario,
+       * la "desocultamos" al iniciarla de nuevo.
+       */
+      if (conv.hiddenBy?.includes(req.user._id)) {
+        await Conversation.findByIdAndUpdate(conv._id, {
+          $pull: { hiddenBy: req.user._id },
+        });
+      }
     }
-    res.json(conversation);
+
+    res.json(conv);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// GET /api/conversations/:id/messages
+// Carga los mensajes respetando la fecha de eliminación del usuario
 router.get('/:id/messages', protect, async (req, res) => {
   try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
-    const skip = (page - 1) * limit;
+    const conversation = await Conversation.findById(req.params.id);
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversación no encontrada' });
+    }
 
-    const total = await Message.countDocuments({ conversation: req.params.id });
-    const totalPages = Math.max(1, Math.ceil(total / limit));
+    /*
+     * FILTRO DE MENSAJES HISTÓRICOS
+     *
+     * Si el usuario borró el chat en algún momento,
+     * guardamos esa fecha en deletedBefore.
+     * Al recargar, solo mostramos mensajes POSTERIORES
+     * a esa fecha — los anteriores siguen "borrados" para él.
+     */
+    const userId      = req.user._id.toString();
+    const deletedDate = conversation.deletedBefore?.get(userId);
 
-    const messages = await Message.find({ conversation: req.params.id })
+    const query = { conversation: req.params.id };
+    if (deletedDate) {
+      query.createdAt = { $gt: deletedDate };
+    }
+
+    const messages = await Message.find(query)
       .populate('sender', 'username avatarColor')
       .sort({ createdAt: 1 })
-      .skip(skip)
-      .limit(limit);
+      .limit(100);
 
+    // Marcar como leídos
     await Message.updateMany(
-      { conversation: req.params.id, readBy: { $ne: req.user._id } },
+      {
+        conversation: req.params.id,
+        readBy:       { $ne: req.user._id },
+        ...(deletedDate ? { createdAt: { $gt: deletedDate } } : {}),
+      },
       { $addToSet: { readBy: req.user._id } }
     );
+
+    // Resetear unreadCount
     await Conversation.findByIdAndUpdate(req.params.id, {
       $set: { [`unreadCount.${req.user._id}`]: 0 },
     });
 
-    res.json({
-      messages,
-      page,
-      limit,
-      total,
-      totalPages,
-      hasMore: page < totalPages,
-    });
+    res.json(messages);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-const { cloudinary } = require('../config/cloudinary');
-
 // DELETE /api/conversations/:id
-// NO borra la conversación — la oculta solo para este usuario (comportamiento WhatsApp)
+// Ocultar conversación solo para este usuario (estilo WhatsApp)
 router.delete('/:id', protect, async (req, res) => {
   try {
     const { deleteMedia } = req.body;
     const conversationId  = req.params.id;
     const userId          = req.user._id;
 
-    // Verificar que existe y que el usuario es participante
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
       return res.status(404).json({ message: 'Conversación no encontrada' });
@@ -101,43 +148,31 @@ router.delete('/:id', protect, async (req, res) => {
       .some((p) => p.toString() === userId.toString());
 
     if (!isParticipant) {
-      return res.status(403).json({ message: 'No tienes acceso a esta conversación' });
+      return res.status(403).json({ message: 'Sin acceso' });
     }
 
-    // Configurar query de actualización dinámica usando $addToSet
-    const updateQuery = {
+    /*
+     * Guardar la fecha actual como "fecha de eliminación" del usuario.
+     * Los mensajes anteriores a esta fecha no se mostrarán.
+     * Los mensajes posteriores sí (si alguien escribe de nuevo).
+     */
+    const updates = {
       $addToSet: { hiddenBy: userId },
+      $set:      { [`deletedBefore.${userId}`]: new Date() },
     };
 
-    if (deleteMedia) {
-      updateQuery.$addToSet.deletedMediaBy = userId;
-    }
+    await Conversation.findByIdAndUpdate(conversationId, updates);
 
-    // Actualizar la conversación y obtener el estado nuevo con { new: true }
-    const updatedConversation = await Conversation.findByIdAndUpdate(
-      conversationId,
-      updateQuery,
-      { new: true }
-    );
-
-    let mediaRealmenteEliminada = false;
-
-    // Verificar si TODOS los participantes solicitaron borrar multimedia
-    const todosBorraronMedia =
-      updatedConversation.participants.length === updatedConversation.deletedMediaBy.length;
-
-    if (deleteMedia && todosBorraronMedia) {
-      mediaRealmenteEliminada = true;
-
-      // Buscar mensajes con archivos de toda la conversación
-      const allMediaMessages = await Message.find({
-        conversation: conversationId,
+    // Eliminar archivos de Cloudinary que el usuario envió
+    if (deleteMedia && cloudinary) {
+      const myMediaMessages = await Message.find({
+        conversation:  conversationId,
+        sender:        userId,
         mediaPublicId: { $ne: null },
       });
 
-      // Eliminar de Cloudinary en batches de 10
-      for (let i = 0; i < allMediaMessages.length; i += 10) {
-        const batch = allMediaMessages.slice(i, i + 10);
+      for (let i = 0; i < myMediaMessages.length; i += 10) {
+        const batch = myMediaMessages.slice(i, i + 10);
         await Promise.allSettled(
           batch.map((msg) => {
             const resourceType = msg.mediaType === 'image'    ? 'image'
@@ -151,47 +186,14 @@ router.delete('/:id', protect, async (req, res) => {
       }
     }
 
-    /*
-     * ─── CAMBIO CLAVE ────────────────────────────────────────────────────────
-     * El socket NO puede emitirse aquí porque routes no tiene acceso directo
-     * al objeto io. Hay dos patrones comunes para resolverlo:
-     *
-     * PATRÓN A (recomendado si usas app.set / req.app.get):
-     *   const io = req.app.get('io');
-     *   const socketId = req.app.get('userSockets')?.[userId.toString()];
-     *   if (socketId) io.to(socketId).emit('conversation:hidden', { conversationId });
-     *
-     * PATRÓN B (si exportas io desde otro módulo):
-     *   const { io, userSockets } = require('../socket');
-     *   const socketId = userSockets.get(userId.toString());
-     *   if (socketId) io.to(socketId).emit('conversation:hidden', { conversationId });
-     *
-     * En AMBOS casos el evento se emite SOLO al socket del usuario que eliminó,
-     * NO a toda la sala de la conversación.
-     * ─────────────────────────────────────────────────────────────────────────
-     */
-    const io          = req.app.get('io');
-    const userSockets = req.app.get('userSockets'); // Map<userId, socketId>
-
-    if (io && userSockets) {
-      const targetSocketId = userSockets.get(userId.toString());
-      if (targetSocketId) {
-        // Solo el usuario que eliminó recibe este evento
-        io.to(targetSocketId).emit('conversation:hidden', {
-          conversationId,
-        });
-      }
-    }
-
     res.json({
       message:      'Chat eliminado de tu lista',
       conversationId,
-      mediaDeleted: mediaRealmenteEliminada,
     });
 
   } catch (err) {
-    console.error('Error ocultando conversación:', err);
-    res.status(500).json({ message: 'Error del servidor', error: err.message });
+    console.error('Error eliminando conversación:', err);
+    res.status(500).json({ message: 'Error del servidor' });
   }
 });
 
