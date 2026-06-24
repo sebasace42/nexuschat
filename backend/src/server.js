@@ -12,6 +12,8 @@ const usersRoutes         = require('./routes/users');
 const conversationsRoutes = require('./routes/conversations');
 const messagesRoutes      = require('./routes/messages');
 const uploadRoutes        = require('./routes/upload');
+const statusRoutes        = require('./routes/status');
+const friendsRoutes       = require('./routes/friends');
 
 connectDB();
 
@@ -62,6 +64,15 @@ const io = new Server(server, {
 
 setupSocket(io);
 
+// Exponer io y userSockets para que las rutas puedan emitir eventos
+// (lo usan friends.js y status.js para notificaciones en tiempo real)
+app.set('io', io);
+
+// userSockets: Map de userId → socketId
+// Se llena en handlers.js cuando un usuario se conecta
+const userSockets = new Map();
+app.set('userSockets', userSockets);
+
 app.use(cors({
   origin: process.env.CLIENT_URL === '*'
     ? '*'
@@ -76,7 +87,8 @@ app.use('/api/users',         usersRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/messages',      messagesRoutes);
 app.use('/api/upload',        uploadRoutes);
-
+app.use('/api/status',        statusRoutes);
+app.use('/api/friends',       friendsRoutes);
 app.get('/api/health', (_, res) =>
   res.json({ status: 'ok', time: new Date(), env: process.env.NODE_ENV })
 );

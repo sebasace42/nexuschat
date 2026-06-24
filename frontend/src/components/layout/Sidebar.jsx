@@ -6,6 +6,8 @@ import Avatar    from '../ui/Avatar';
 import StatusDot from '../ui/StatusDot';
 import NewChatModal    from '../modals/NewChatModal';
 import DeleteChatModal from '../modals/DeleteChatModal';
+import StoriesBar  from './StoriesBar';
+import FriendsModal from '../modals/FriendsModal'; // ← NUEVO
 
 const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const { user }                = useAuth();
@@ -16,23 +18,43 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const [deleteModal,   setDeleteModal]   = useState(null);
   const [deleting,      setDeleting]      = useState(false);
   const [menuConvId,    setMenuConvId]    = useState(null);
+  const [showFriends,   setShowFriends]   = useState(false);   // ← NUEVO
+  const [friendBadge,   setFriendBadge]  = useState(0);        // ← NUEVO badge de solicitudes
   const longPressRef = useRef(null);
 
-  // Guardar la referencia del chat seleccionado para evitar re-suscripciones del socket
   const selectedConvRef = useRef(selectedConv);
-  useEffect(() => {
-    selectedConvRef.current = selectedConv;
-  }, [selectedConv]);
+  useEffect(() => { selectedConvRef.current = selectedConv; }, [selectedConv]);
 
   useEffect(() => { if (user) fetchConversations(); }, [user]);
 
-  // Unirse a todas las salas de socket al cargar o cambiar la lista
+  // ── NUEVO: Cargar badge de solicitudes pendientes al montar ─────────────────
+  useEffect(() => {
+    if (!user) return;
+    api.get('/friends/requests')
+      .then(({ data }) => setFriendBadge(data.length))
+      .catch(() => {});
+  }, [user]);
+
+  // Unirse a salas de socket
   useEffect(() => {
     if (!socket || conversations.length === 0) return;
     socket.emit('conversations:join', conversations.map((c) => c._id));
   }, [socket, conversations]);
 
-  // ─── NUEVO MENSAJE: actualiza lastMessage y badge sin romper el socket ─────
+  // ── NUEVO: Badge de solicitudes en tiempo real ──────────────────────────────
+  useEffect(() => {
+    if (!socket) return;
+    const onFriendRequest = () => setFriendBadge((n) => n + 1);
+    const onFriendAccepted = () => {}; // no cambia el badge de solicitudes recibidas
+    socket.on('friend:request',  onFriendRequest);
+    socket.on('friend:accepted', onFriendAccepted);
+    return () => {
+      socket.off('friend:request',  onFriendRequest);
+      socket.off('friend:accepted', onFriendAccepted);
+    };
+  }, [socket]);
+
+  // ─── Nuevo mensaje ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket || !user?._id) return;
 
@@ -44,7 +66,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
           return prev
             .map((c) => {
               if (c._id !== conversationId) return c;
-              // Usamos la referencia para saber el estado real actual
               const isActive = selectedConvRef.current?._id === conversationId;
               const cur = c.unreadCount?.[user._id] || 0;
               return {
@@ -60,7 +81,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
             .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         }
 
-        // La conv estaba oculta y el otro escribió: recuperarla
         api.get(`/conversations/${conversationId}`)
           .then(({ data }) => {
             setConversations((latest) => {
@@ -79,10 +99,9 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
 
     socket.on('conversation:updated', handler);
     return () => socket.off('conversation:updated', handler);
-    // Dejamos solo user._id y socket para que no cree bucles infinitos de conexión/desconexión
   }, [socket, user?._id]);
 
-  // ─── CHAT OCULTO ─────────────────────────────────────────────────────────
+  // ─── Chat oculto ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
     const onConvHidden = ({ conversationId }) => {
@@ -93,7 +112,7 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
     return () => socket.off('conversation:hidden', onConvHidden);
   }, [socket, onSelectConversation]);
 
-  // ─── PERFIL ACTUALIZADO EN TIEMPO REAL ───────────────────────────────────
+  // ─── Perfil actualizado ───────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
     const onUserUpdated = ({ userId, username, avatarColor }) => {
@@ -149,9 +168,7 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
   const handleTouchStart = (convId) => {
     longPressRef.current = setTimeout(() => setMenuConvId(convId), 500);
   };
-  const handleTouchEnd = () => {
-    clearTimeout(longPressRef.current);
-  };
+  const handleTouchEnd = () => { clearTimeout(longPressRef.current); };
 
   const formatTime = (d) => {
     if (!d) return '';
@@ -180,13 +197,34 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
             <h1 className="font-display text-xl font-extrabold text-white tracking-tight">
               Nexus<span className="text-accent">Chat</span>
             </h1>
-            <button
-              onClick={() => setShowNewChat(true)}
-              className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-bright flex items-center justify-center transition-colors text-white font-bold text-xl"
-              title="Nuevo chat"
-            >
-              +
-            </button>
+            <div className="flex items-center gap-1">
+              {/* ── NUEVO: Botón de contactos con badge ── */}
+              <button
+                onClick={() => { setShowFriends(true); setFriendBadge(0); }}
+                className="relative w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-white hover:bg-hover transition-colors"
+                title="Contactos"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                {friendBadge > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] bg-accent text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+                    {friendBadge > 9 ? '9+' : friendBadge}
+                  </span>
+                )}
+              </button>
+              {/* Botón nuevo chat (igual que antes) */}
+              <button
+                onClick={() => setShowNewChat(true)}
+                className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-bright flex items-center justify-center transition-colors text-white font-bold text-xl"
+                title="Nuevo chat"
+              >
+                +
+              </button>
+            </div>
           </div>
           <div
             className="flex items-center gap-2 bg-input rounded-full px-3 py-2.5 border border-white/5 cursor-text"
@@ -197,7 +235,10 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
           </div>
         </div>
 
-        {/* ── Tabs ── */}
+        {/* ── StoriesBar (intacta) ── */}
+        <StoriesBar />
+
+        {/* ── Tabs chats ── */}
         <div className="flex gap-1 px-4 pt-3 pb-1 flex-shrink-0">
           {[['all', 'Todos'], ['unread', 'No leídos']].map(([val, label]) => (
             <button
@@ -400,6 +441,19 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
           isDeleting={deleting}
           onClose={() => setDeleteModal(null)}
           onConfirm={handleDeleteConversation}
+        />
+      )}
+
+      {/* ── NUEVO: Modal de contactos ── */}
+      {showFriends && (
+        <FriendsModal
+          onClose={() => setShowFriends(false)}
+          onStartChat={(conv) => {
+            setConversations((prev) =>
+              prev.find((c) => c._id === conv._id) ? prev : [conv, ...prev]
+            );
+            handleSelect(conv);
+          }}
         />
       )}
     </>

@@ -4,6 +4,7 @@ const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
+// ── GET /api/users/search ─────────────────────────────────────────────────────
 router.get('/search', protect, async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json([]);
@@ -23,7 +24,7 @@ router.get('/search', protect, async (req, res) => {
   }
 });
 
-// ── PUT /api/users/profile — editar perfil ───────────────────────
+// ── PUT /api/users/profile — editar perfil ────────────────────────────────────
 router.put('/profile', protect, async (req, res) => {
   const { username, bio, avatarColor, hideOnline, hideLastSeen, hideReadReceipt } = req.body;
 
@@ -43,7 +44,7 @@ router.put('/profile', protect, async (req, res) => {
       {
         username:        username.trim(),
         bio:             bio?.trim() ?? '',
-        avatarColor:     avatarColor ?? req.user.avatarColor,
+        avatarColor:     avatarColor     ?? req.user.avatarColor,
         hideOnline:      hideOnline      ?? req.user.hideOnline,
         hideLastSeen:    hideLastSeen    ?? req.user.hideLastSeen,
         hideReadReceipt: hideReadReceipt ?? req.user.hideReadReceipt,
@@ -60,9 +61,42 @@ router.put('/profile', protect, async (req, res) => {
       hideOnline:      updated.hideOnline,
       hideLastSeen:    updated.hideLastSeen,
       hideReadReceipt: updated.hideReadReceipt,
+      isPrivate:       updated.isPrivate,
     });
   } catch (err) {
     res.status(500).json({ message: 'Error del servidor', error: err.message });
+  }
+});
+
+// ── PATCH /api/users/privacy — cambiar perfil público/privado ─────────────────
+router.patch('/privacy', protect, async (req, res) => {
+  try {
+    const { isPrivate } = req.body;
+    if (typeof isPrivate !== 'boolean')
+      return res.status(400).json({ message: 'isPrivate debe ser true o false' });
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { isPrivate } },
+      { new: true, select: '-password' }
+    );
+
+    // Notificar al propio usuario en tiempo real para actualizar su contexto
+    const io          = req.app.get('io');
+    const userSockets = req.app.get('userSockets');
+    if (io && userSockets) {
+      const socketId = userSockets.get(req.user._id.toString());
+      if (socketId) {
+        io.to(socketId).emit('user:privacy_changed', {
+          userId:    updated._id,
+          isPrivate: updated.isPrivate,
+        });
+      }
+    }
+
+    res.json({ isPrivate: updated.isPrivate });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

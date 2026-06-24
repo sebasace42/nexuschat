@@ -58,30 +58,30 @@ const SettingsModal = ({ onClose }) => {
     localStorage.getItem('notif_preview') !== 'false'
   );
 
-  useEffect(() => {
-    localStorage.setItem('notif_messages', notifMessages);
-  }, [notifMessages]);
-  useEffect(() => {
-    localStorage.setItem('notif_sounds', notifSounds);
-  }, [notifSounds]);
-  useEffect(() => {
-    localStorage.setItem('notif_preview', notifPreview);
-  }, [notifPreview]);
+  useEffect(() => { localStorage.setItem('notif_messages', notifMessages); }, [notifMessages]);
+  useEffect(() => { localStorage.setItem('notif_sounds',   notifSounds);   }, [notifSounds]);
+  useEffect(() => { localStorage.setItem('notif_preview',  notifPreview);  }, [notifPreview]);
 
-  // ── Privacidad ────────────────────────────────────────────────
-  const [hideOnline,    setHideOnline]    = useState(user?.hideOnline    ?? false);
-  const [hideLastSeen,  setHideLastSeen]  = useState(user?.hideLastSeen  ?? false);
+  // ── Privacidad de visibilidad ─────────────────────────────────
+  const [hideOnline,      setHideOnline]      = useState(user?.hideOnline      ?? false);
+  const [hideLastSeen,    setHideLastSeen]    = useState(user?.hideLastSeen    ?? false);
   const [hideReadReceipt, setHideReadReceipt] = useState(user?.hideReadReceipt ?? false);
-  const [savingPrivacy, setSavingPrivacy] = useState(false);
-  const [privacySaved,  setPrivacySaved]  = useState(false);
+  const [savingPrivacy,   setSavingPrivacy]   = useState(false);
+  const [privacySaved,    setPrivacySaved]    = useState(false);
 
+  // ── Tipo de cuenta: privada / pública ─────────────────────────
+  const [isPrivate,      setIsPrivate]      = useState(user?.isPrivate ?? false);
+  const [savingAccount,  setSavingAccount]  = useState(false);
+  const [accountSaved,   setAccountSaved]   = useState(false);
+
+  // Guardar visibilidad (hideOnline, hideLastSeen, hideReadReceipt)
   const handleSavePrivacy = async () => {
     setSavingPrivacy(true);
     try {
       const { data } = await api.put('/users/profile', {
-        username: user.username,
-        bio:      user.bio ?? '',
-        avatarColor: user.avatarColor,
+        username:        user.username,
+        bio:             user.bio ?? '',
+        avatarColor:     user.avatarColor,
         hideOnline,
         hideLastSeen,
         hideReadReceipt,
@@ -96,7 +96,24 @@ const SettingsModal = ({ onClose }) => {
     }
   };
 
-  // ── Editar perfil: guardar ────────────────────────────────────
+  // Guardar tipo de cuenta (isPrivate)
+  const handleSaveAccount = async (value) => {
+    setSavingAccount(true);
+    setIsPrivate(value);
+    try {
+      await api.patch('/users/privacy', { isPrivate: value });
+      updateUser({ ...user, isPrivate: value });
+      setAccountSaved(true);
+      setTimeout(() => setAccountSaved(false), 1800);
+    } catch (err) {
+      console.error(err);
+      setIsPrivate(!value); // revertir en caso de error
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  // Guardar perfil
   const handleSave = async () => {
     if (!username.trim())           return setError('El nombre no puede estar vacío');
     if (username.trim().length < 3) return setError('Mínimo 3 caracteres');
@@ -120,7 +137,6 @@ const SettingsModal = ({ onClose }) => {
 
   const goBack = () => { setView('main'); setError(''); };
 
-  // ── Títulos del header por vista ──────────────────────────────
   const titles = {
     main:          'Configuración',
     edit:          'Editar perfil',
@@ -151,7 +167,7 @@ const SettingsModal = ({ onClose }) => {
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">✕</button>
         </div>
 
-        {/* ── CONTENIDO SCROLLEABLE ── */}
+        {/* ── CONTENIDO ── */}
         <div className="overflow-y-auto flex-1">
 
           {/* ════ VISTA PRINCIPAL ════ */}
@@ -165,9 +181,19 @@ const SettingsModal = ({ onClose }) => {
                   {user?.bio && (
                     <p className="text-text-secondary text-xs mt-0.5 truncate">{user.bio}</p>
                   )}
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="w-2 h-2 rounded-full bg-accent-green inline-block" />
-                    <span className="text-xs text-accent-green font-medium">En línea</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-accent-green inline-block" />
+                      <span className="text-xs text-accent-green font-medium">En línea</span>
+                    </div>
+                    {/* Badge tipo de cuenta */}
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      user?.isPrivate
+                        ? 'bg-accent/15 text-accent'
+                        : 'bg-white/10 text-text-muted'
+                    }`}>
+                      {user?.isPrivate ? '🔒 Privado' : '🌐 Público'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -182,19 +208,19 @@ const SettingsModal = ({ onClose }) => {
                   <button
                     key={id}
                     onClick={() => setView(id)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl hover:bg-hover text-text-secondary hover:text-text-primary transition-colors text-sm text-left"
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-hover transition-colors text-left"
                   >
-                    <span>{label}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-40">
-                      <polyline points="9 18 15 12 9 6"/>
-                    </svg>
+                    <span className="text-sm text-text-primary">{label}</span>
+                    <span className="text-text-muted text-xs">›</span>
                   </button>
                 ))}
               </div>
 
               <div className="px-4 pb-4">
-                <button onClick={logout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-accent-red/10 hover:bg-accent-red/20 text-accent-red font-medium text-sm transition-colors">
+                <button
+                  onClick={logout}
+                  className="w-full py-3 rounded-xl bg-accent-red/10 text-accent-red text-sm font-medium hover:bg-accent-red/20 transition-colors"
+                >
                   🚪 Cerrar sesión
                 </button>
               </div>
@@ -220,21 +246,35 @@ const SettingsModal = ({ onClose }) => {
               <div className="p-6 space-y-4">
                 <div>
                   <label className="text-xs text-text-muted uppercase tracking-wider mb-1.5 block">Nombre de usuario</label>
-                  <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} maxLength={30}
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    maxLength={30}
                     className="w-full bg-input border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent placeholder-text-muted transition-colors"
-                    placeholder="Tu nombre..." />
+                    placeholder="Tu nombre..."
+                  />
                 </div>
                 <div>
-                  <label className="text-xs text-text-muted uppercase tracking-wider mb-1.5 block">Bio <span className="normal-case text-text-muted/60">(opcional)</span></label>
-                  <textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={100} rows={2}
+                  <label className="text-xs text-text-muted uppercase tracking-wider mb-1.5 block">
+                    Bio <span className="normal-case text-text-muted/60">(opcional)</span>
+                  </label>
+                  <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    maxLength={100}
+                    rows={2}
                     className="w-full bg-input border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white resize-none focus:outline-none focus:border-accent placeholder-text-muted transition-colors"
-                    placeholder="Cuéntanos algo..." />
+                    placeholder="Cuéntanos algo..."
+                  />
                   <p className="text-right text-[10px] text-text-muted mt-1">{bio.length}/100</p>
                 </div>
                 {error   && <p className="text-xs text-accent-red bg-accent-red/10 px-3 py-2 rounded-lg">{error}</p>}
                 {success && <p className="text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg">✓ Perfil actualizado</p>}
                 <div className="flex gap-3 pt-1">
-                  <button onClick={goBack} className="flex-1 py-2.5 rounded-xl border border-white/10 text-text-secondary text-sm hover:bg-hover transition-colors">Cancelar</button>
+                  <button onClick={goBack} className="flex-1 py-2.5 rounded-xl border border-white/10 text-text-secondary text-sm hover:bg-hover transition-colors">
+                    Cancelar
+                  </button>
                   <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
                     {saving ? 'Guardando...' : 'Guardar'}
                   </button>
@@ -247,25 +287,9 @@ const SettingsModal = ({ onClose }) => {
           {view === 'notifications' && (
             <div className="p-6">
               <p className="text-xs text-text-muted uppercase tracking-wider mb-4">Mensajes</p>
-              <Toggle
-                enabled={notifMessages}
-                onChange={setNotifMessages}
-                label="Notificaciones de mensajes"
-                description="Recibir alertas cuando llegue un mensaje nuevo"
-              />
-              <Toggle
-                enabled={notifSounds}
-                onChange={setNotifSounds}
-                label="Sonidos"
-                description="Reproducir sonido al recibir un mensaje"
-              />
-              <Toggle
-                enabled={notifPreview}
-                onChange={setNotifPreview}
-                label="Vista previa del mensaje"
-                description="Mostrar el texto del mensaje en la notificación"
-              />
-
+              <Toggle enabled={notifMessages}  onChange={setNotifMessages}  label="Notificaciones de mensajes" description="Recibir alertas cuando llegue un mensaje nuevo" />
+              <Toggle enabled={notifSounds}    onChange={setNotifSounds}    label="Sonidos"                    description="Reproducir sonido al recibir un mensaje" />
+              <Toggle enabled={notifPreview}   onChange={setNotifPreview}   label="Vista previa del mensaje"   description="Mostrar el texto del mensaje en la notificación" />
               <div className="mt-6 bg-white/5 rounded-xl p-4">
                 <p className="text-xs text-text-muted leading-relaxed">
                   💡 Para que las notificaciones funcionen en tu dispositivo, asegúrate de tener los permisos activados en la configuración de tu navegador.
@@ -276,54 +300,127 @@ const SettingsModal = ({ onClose }) => {
 
           {/* ════ VISTA PRIVACIDAD ════ */}
           {view === 'privacy' && (
-            <div className="p-6">
-              <p className="text-xs text-text-muted uppercase tracking-wider mb-4">Visibilidad</p>
-              <Toggle
-                enabled={hideOnline}
-                onChange={setHideOnline}
-                label="Ocultar estado en línea"
-                description="Los demás no verán si estás conectado"
-              />
-              <Toggle
-                enabled={hideLastSeen}
-                onChange={setHideLastSeen}
-                label="Ocultar última vez visto"
-                description="Los demás no verán cuándo fue tu última conexión"
-              />
-              <Toggle
-                enabled={hideReadReceipt}
-                onChange={setHideReadReceipt}
-                label="Ocultar confirmación de lectura"
-                description="Los demás no verán cuando lees sus mensajes"
-              />
+            <div className="p-6 space-y-6">
 
-              <p className="text-xs text-text-muted uppercase tracking-wider mt-6 mb-4">Próximamente</p>
-              {['Bloquear usuarios', 'Mensajes temporales', 'Modo invisible'].map((item) => (
-                <div key={item} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 opacity-40">
-                  <p className="text-sm text-text-primary">{item}</p>
-                  <span className="text-[10px] bg-white/10 text-text-muted px-2 py-0.5 rounded-full">Pronto</span>
+              {/* ── Tipo de cuenta ── */}
+              <div>
+                <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Tipo de cuenta</p>
+
+                <div className="rounded-2xl border border-white/8 overflow-hidden">
+
+                  {/* Opción: Pública */}
+                  <button
+                    onClick={() => !savingAccount && !isPrivate === false && handleSaveAccount(false)}
+                    disabled={savingAccount || !isPrivate}
+                    className={`w-full flex items-start gap-4 px-4 py-4 text-left transition-colors border-b border-white/5 ${
+                      !isPrivate ? 'bg-accent/8' : 'hover:bg-white/3'
+                    } disabled:cursor-default`}
+                  >
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${!isPrivate ? 'bg-accent/20' : 'bg-white/5'}`}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={!isPrivate ? 'text-accent' : 'text-text-muted'}>
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="2" y1="12" x2="22" y2="12"/>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-semibold ${!isPrivate ? 'text-white' : 'text-text-primary'}`}>Cuenta pública</p>
+                        {!isPrivate && <span className="text-[9px] font-bold text-accent bg-accent/15 px-1.5 py-0.5 rounded-full">ACTIVO</span>}
+                      </div>
+                      <p className="text-xs text-text-muted mt-0.5 leading-relaxed">
+                        Cualquier persona puede escribirte y ver tus estados.
+                      </p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1 ${!isPrivate ? 'border-accent bg-accent' : 'border-white/20'}`}>
+                      {!isPrivate && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </button>
+
+                  {/* Opción: Privada */}
+                  <button
+                    onClick={() => !savingAccount && isPrivate === false && handleSaveAccount(true)}
+                    disabled={savingAccount || isPrivate}
+                    className={`w-full flex items-start gap-4 px-4 py-4 text-left transition-colors ${
+                      isPrivate ? 'bg-accent/8' : 'hover:bg-white/3'
+                    } disabled:cursor-default`}
+                  >
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isPrivate ? 'bg-accent/20' : 'bg-white/5'}`}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isPrivate ? 'text-accent' : 'text-text-muted'}>
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-semibold ${isPrivate ? 'text-white' : 'text-text-primary'}`}>Cuenta privada</p>
+                        {isPrivate && <span className="text-[9px] font-bold text-accent bg-accent/15 px-1.5 py-0.5 rounded-full">ACTIVO</span>}
+                      </div>
+                      <p className="text-xs text-text-muted mt-0.5 leading-relaxed">
+                        Solo contactos aprobados pueden escribirte y ver tus estados.
+                      </p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1 ${isPrivate ? 'border-accent bg-accent' : 'border-white/20'}`}>
+                      {isPrivate && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </button>
                 </div>
-              ))}
 
-              {privacySaved && (
-                <p className="text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg mt-4">✓ Privacidad actualizada</p>
-              )}
+                {/* Feedback tipo de cuenta */}
+                {savingAccount && (
+                  <div className="flex items-center gap-2 mt-2 text-text-muted text-xs">
+                    <div className="w-3 h-3 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                    Guardando...
+                  </div>
+                )}
+                {accountSaved && (
+                  <p className="text-xs text-accent-green mt-2 flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Guardado correctamente
+                  </p>
+                )}
+              </div>
 
-              <button
-                onClick={handleSavePrivacy}
-                disabled={savingPrivacy}
-                className="w-full mt-5 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-              >
-                {savingPrivacy ? 'Guardando...' : 'Guardar cambios'}
-              </button>
+              {/* ── Visibilidad ── */}
+              <div>
+                <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Visibilidad</p>
+                <Toggle enabled={hideOnline}      onChange={setHideOnline}      label="Ocultar estado en línea"          description="Los demás no verán si estás conectado" />
+                <Toggle enabled={hideLastSeen}    onChange={setHideLastSeen}    label="Ocultar última vez visto"         description="Los demás no verán cuándo fue tu última conexión" />
+                <Toggle enabled={hideReadReceipt} onChange={setHideReadReceipt} label="Ocultar confirmación de lectura"  description="Los demás no verán cuando lees sus mensajes" />
+
+                {privacySaved && (
+                  <p className="text-xs text-accent-green bg-accent-green/10 px-3 py-2 rounded-lg mt-3 flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Privacidad actualizada
+                  </p>
+                )}
+
+                <button
+                  onClick={handleSavePrivacy}
+                  disabled={savingPrivacy}
+                  className="w-full mt-4 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {savingPrivacy ? 'Guardando...' : 'Guardar cambios de visibilidad'}
+                </button>
+              </div>
+
+              {/* ── Próximamente ── */}
+              <div>
+                <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Próximamente</p>
+                {['Bloquear usuarios', 'Mensajes temporales', 'Modo invisible'].map((item) => (
+                  <div key={item} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 opacity-40">
+                    <p className="text-sm text-text-primary">{item}</p>
+                    <span className="text-[10px] bg-white/10 text-text-muted px-2 py-0.5 rounded-full">Pronto</span>
+                  </div>
+                ))}
+              </div>
+
             </div>
           )}
 
           {/* ════ VISTA AYUDA ════ */}
           {view === 'help' && (
             <div className="p-6 space-y-4">
-
-              {/* Info de la app */}
               <div className="flex flex-col items-center py-4 border-b border-white/5">
                 <p className="font-display text-2xl font-extrabold text-white">
                   Nexus<span className="text-accent">Chat</span>
@@ -334,32 +431,14 @@ const SettingsModal = ({ onClose }) => {
                 </p>
               </div>
 
-              {/* FAQ */}
               {[
-                {
-                  q: '¿Cómo envío una imagen?',
-                  a: 'Toca el ícono 🖼️ en el input de mensaje, selecciona la imagen y pulsa enviar.',
-                },
-                {
-                  q: '¿Qué significa el doble check azul?',
-                  a: '✓ gris = enviado. ✓✓ gris = entregado al dispositivo. ✓✓ azul = leído por el receptor.',
-                },
-                {
-                  q: '¿Cómo inicio un nuevo chat?',
-                  a: 'Toca el botón + en la parte superior de la lista de conversaciones y busca al usuario por nombre.',
-                },
-                {
-                  q: '¿Puedo usar NexusChat en PC y celular?',
-                  a: 'Sí, NexusChat funciona en cualquier navegador, tanto en móvil como en escritorio.',
-                },
-                {
-                  q: '¿Cómo elimino un mensaje?',
-                  a: 'Mantén presionado el mensaje (móvil) o pasa el cursor por encima (PC) y toca el ícono de papelera.',
-                },
-                {
-                  q: '¿Cómo cambio mi foto de perfil?',
-                  a: 'Ve a Configuración → Editar perfil y selecciona un color de avatar.',
-                },
+                { q: '¿Cómo envío una imagen?',              a: 'Toca el ícono 🖼️ en el input de mensaje, selecciona la imagen y pulsa enviar.' },
+                { q: '¿Qué significa el doble check azul?',   a: '✓ gris = enviado. ✓✓ gris = entregado al dispositivo. ✓✓ azul = leído por el receptor.' },
+                { q: '¿Cómo inicio un nuevo chat?',           a: 'Toca el botón + en la parte superior de la lista de conversaciones y busca al usuario por nombre.' },
+                { q: '¿Puedo usar NexusChat en PC y celular?',a: 'Sí, NexusChat funciona en cualquier navegador, tanto en móvil como en escritorio.' },
+                { q: '¿Cómo elimino un mensaje?',             a: 'Mantén presionado el mensaje (móvil) o pasa el cursor por encima (PC) y toca el ícono de papelera.' },
+                { q: '¿Cómo cambio mi foto de perfil?',       a: 'Ve a Configuración → Editar perfil y selecciona un color de avatar.' },
+                { q: '¿Qué es una cuenta privada?',           a: 'Con cuenta privada solo tus contactos aprobados pueden escribirte y ver tus estados. Actívalo en Privacidad.' },
               ].map(({ q, a }) => (
                 <div key={q} className="bg-white/5 rounded-xl p-4">
                   <p className="text-sm font-medium text-white mb-1">{q}</p>
@@ -367,11 +446,9 @@ const SettingsModal = ({ onClose }) => {
                 </div>
               ))}
 
-              {/* Footer */}
               <div className="text-center pt-2 pb-1">
                 <p className="text-xs text-text-muted">Hecho con ❤️ · NexusChat © 2026</p>
               </div>
-
             </div>
           )}
 

@@ -23,10 +23,15 @@ const userSchema = new mongoose.Schema({
   lastSeen:  { type: Date,    default: Date.now },
   bio:       { type: String,  default: '', maxlength: 100 },
 
-  // ── Privacidad ────────────────────────────────────────────────
+  // ── Privacidad de visibilidad ─────────────────────────────────
   hideOnline:      { type: Boolean, default: false },
   hideLastSeen:    { type: Boolean, default: false },
   hideReadReceipt: { type: Boolean, default: false },
+
+  // ── Tipo de cuenta: privada (true) o pública (false) ─────────
+  // Privada  → solo contactos aceptados pueden escribir y ver estados
+  // Pública  → cualquier usuario puede escribir y ver estados
+  isPrivate: { type: Boolean, default: false },
 
 }, { timestamps: true });
 
