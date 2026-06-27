@@ -18,7 +18,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Solo redirige a login si el usuario intenta acceder a rutas protegidas
+    // No redirige en /auth/me para evitar loop infinito
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
       localStorage.removeItem('nexus_token');
       localStorage.removeItem('nexus_user');
       window.location.href = '/';
