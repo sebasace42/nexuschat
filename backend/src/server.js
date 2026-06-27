@@ -93,7 +93,7 @@ app.get('/api/health', (_, res) =>
   res.json({ status: 'ok', time: new Date(), env: process.env.NODE_ENV })
 );
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 7860;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor en http://localhost:${PORT}`);
+  console.log(` Servidor en puerto ${PORT}`);
 });
