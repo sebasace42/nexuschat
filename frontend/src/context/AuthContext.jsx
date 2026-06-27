@@ -12,18 +12,32 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('nexus_token');
-    if (!token) { setLoading(false); return; }
+    if (!token) { 
+      setLoading(false); 
+      return; 
+    }
+    
+    // Timeout de 5 segundos para evitar que se cuelgue infinitamente
+    const timeout = setTimeout(() => {
+      console.warn('Auth check timeout - considerando sin sesión');
+      setLoading(false);
+    }, 5000);
+    
     api.get('/auth/me')
       .then(({ data }) => {
+        clearTimeout(timeout);
         setUser(data);
         localStorage.setItem('nexus_user', JSON.stringify(data));
+        setLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
+        clearTimeout(timeout);
+        console.error('Auth error:', error.message);
         localStorage.removeItem('nexus_token');
         localStorage.removeItem('nexus_user');
         setUser(null);
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      });
   }, []);
 
   const login = useCallback((userData) => {
@@ -39,8 +53,6 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
-  // ── Actualizar datos del usuario sin cerrar sesión ─────────────
-  // Se llama desde SettingsModal después de guardar en el backend
   const updateUser = useCallback((updatedData) => {
     setUser((prev) => {
       const merged = { ...prev, ...updatedData };
