@@ -42,7 +42,19 @@ const messageSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   }],
- 
+
+  // ── Respuesta a un estado/historia ───────────────────────────
+  // Se guarda como "foto" del estado (no como referencia) porque
+  // el estado original expira/se borra a las 24h y la respuesta
+  // debe seguir mostrándose igual que en WhatsApp.
+  statusReply: {
+    statusId: { type: mongoose.Schema.Types.ObjectId, ref: 'Status', default: null },
+    type:     { type: String, enum: ['text', 'image', 'video', null], default: null },
+    text:     { type: String, default: '' },
+    bgColor:  { type: String, default: null },
+    mediaUrl: { type: String, default: null },
+  },
+
 }, { timestamps: true });
  
 messageSchema.index({ conversation: 1, sender: 1, status: 1 });

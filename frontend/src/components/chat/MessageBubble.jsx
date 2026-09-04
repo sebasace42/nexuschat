@@ -37,6 +37,37 @@ const formatSize = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+// ── Vista previa del estado al que se respondió ──────────────────
+const StatusReplyPreview = ({ statusReply, isOwn }) => {
+  if (!statusReply) return null;
+  return (
+    <div className={`
+      flex items-center gap-2 mx-2 mt-2 mb-1 p-1.5 rounded-lg
+      border-l-2 border-accent-bright
+      ${isOwn ? 'bg-black/15' : 'bg-black/20'}
+    `}>
+      <div className="w-9 h-11 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center"
+        style={{ backgroundColor: statusReply.type === 'text' ? (statusReply.bgColor || '#5b4fcf') : '#00000055' }}
+      >
+        {statusReply.type === 'text' ? (
+          <span className="text-[7px] text-white text-center px-0.5 leading-tight line-clamp-3">
+            {statusReply.text}
+          </span>
+        ) : statusReply.mediaUrl ? (
+          statusReply.type === 'video' ? (
+            <video src={statusReply.mediaUrl} className="w-full h-full object-cover" muted />
+          ) : (
+            <img src={statusReply.mediaUrl} className="w-full h-full object-cover" alt="" />
+          )
+        ) : null}
+      </div>
+      <p className="text-[11px] opacity-70 leading-tight">
+        {isOwn ? 'Respondiste a su estado' : 'Respondió a tu estado'}
+      </p>
+    </div>
+  );
+};
+
 // ── Reproductor de audio estilo WhatsApp ─────────────────────────
 const AudioPlayer = ({ src, isOwn }) => {
   const audioRef              = useRef(null);
@@ -510,6 +541,9 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
                 }`
             }
           `}>
+            {/* Respuesta a un estado */}
+            <StatusReplyPreview statusReply={message.statusReply} isOwn={isOwn} />
+
             {/* Contenido multimedia */}
             {message.mediaUrl && (
               <div className={message.text ? 'p-2 pb-0' : message.mediaType === 'audio' ? '' : 'p-2'}>

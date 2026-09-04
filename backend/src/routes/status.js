@@ -127,6 +127,27 @@ router.post('/:id/view', protect, async (req, res) => {
   }
 });
 
+// ── GET /api/status/:id/viewers ───────────────────────────────────────────────
+// Lista de quién vio tu estado (solo el dueño puede consultarlo)
+router.get('/:id/viewers', protect, async (req, res) => {
+  try {
+    const status = await Status.findById(req.params.id)
+      .populate('views.user', 'username avatarColor');
+    if (!status) return res.status(404).json({ message: 'Estado no encontrado' });
+    if (status.user.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: 'No autorizado' });
+
+    const viewers = status.views
+      .filter((v) => v.user) // por si el usuario fue borrado
+      .map((v) => ({ user: v.user, viewedAt: v.viewedAt }))
+      .sort((a, b) => new Date(b.viewedAt) - new Date(a.viewedAt));
+
+    res.json(viewers);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── DELETE /api/status/:id ────────────────────────────────────────────────────
 router.delete('/:id', protect, async (req, res) => {
   try {
@@ -143,34 +164,61 @@ router.delete('/:id', protect, async (req, res) => {
     }
 
     await Status.findByIdAndDelete(req.params.id);
+
+    // Notificar a contactos en tiempo real para que lo quiten de su barra
+    _emitDeleteToFriends(req, status.user, req.params.id);
+
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// ── Helper interno: obtener los socketId de los contactos aceptados ───────────
+async function _getFriendSocketIds(req, userId) {
+  const io          = req.app.get('io');
+  const userSockets = req.app.get('userSockets');
+  if (!io || !userSockets) return { io: null, socketIds: [] };
+
+  const Friendship = require('../models/Friendship');
+  const friendships = await Friendship.find({
+    $or: [{ requester: userId }, { recipient: userId }],
+    status: 'accepted',
+  });
+
+  const socketIds = friendships
+    .map((f) => {
+      const otherId = f.requester.toString() === userId.toString()
+        ? f.recipient.toString()
+        : f.requester.toString();
+      return userSockets.get(otherId);
+    })
+    .filter(Boolean);
+
+  return { io, socketIds };
+}
+
 // ── Helper interno: emitir status:new a todos los contactos del usuario ───────
 async function _emitToFriends(req, status) {
   try {
-    const io          = req.app.get('io');
-    const userSockets = req.app.get('userSockets');
-    if (!io || !userSockets) return;
-
-    const Friendship = require('../models/Friendship');
-    const friendships = await Friendship.find({
-      $or: [{ requester: status.user._id }, { recipient: status.user._id }],
-      status: 'accepted',
-    });
-
-    friendships.forEach((f) => {
-      const otherId = f.requester.toString() === status.user._id.toString()
-        ? f.recipient.toString()
-        : f.requester.toString();
-      const socketId = userSockets.get(otherId);
-      if (socketId) io.to(socketId).emit('status:new', { status });
-    });
+    const { io, socketIds } = await _getFriendSocketIds(req, status.user._id);
+    if (!io) return;
+    socketIds.forEach((socketId) => io.to(socketId).emit('status:new', { status }));
   } catch (err) {
     console.error('_emitToFriends error:', err);
+  }
+}
+
+// ── Helper interno: emitir status:deleted a todos los contactos del usuario ───
+async function _emitDeleteToFriends(req, userId, statusId) {
+  try {
+    const { io, socketIds } = await _getFriendSocketIds(req, userId);
+    if (!io) return;
+    socketIds.forEach((socketId) =>
+      io.to(socketId).emit('status:deleted', { statusId, userId: userId.toString() })
+    );
+  } catch (err) {
+    console.error('_emitDeleteToFriends error:', err);
   }
 }
 

@@ -71,7 +71,7 @@ const setupSocket = (io) => {
      * 4. Actualizamos el lastMessage de la conversación
      * 5. Notificamos el sidebar de los otros participantes
      */
-    socket.on('message:send', async ({ conversationId, text }) => {
+    socket.on('message:send', async ({ conversationId, text, statusReply }) => {
       if (!text?.trim() || !conversationId) return;
 
       try {
@@ -81,6 +81,7 @@ const setupSocket = (io) => {
           sender:       userId,
           text:         text.trim(),
           readBy:       [userId],
+          statusReply:  statusReply || undefined,
         });
 
         // Popular sender para el frontend

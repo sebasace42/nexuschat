@@ -6,7 +6,14 @@ const api = axios.create({
   baseURL: window.location.hostname === 'localhost'
     ? '/api'
     : BACKEND_URL,
-  headers: { 'Content-Type': 'application/json' },
+  // OJO: no fijar aquí 'Content-Type': 'application/json'.
+  // Si se fija a nivel de instancia, axios lo respeta incluso cuando
+  // el body es un FormData (subida de fotos/videos de estados), y en
+  // vez de dejar que el navegador arme el multipart/form-data con su
+  // boundary, convierte el FormData a JSON y rompe la subida de archivos.
+  // Dejando esto sin definir, axios pone 'application/json' automáticamente
+  // para objetos normales, y 'multipart/form-data; boundary=...' automáticamente
+  // cuando el body es FormData.
 });
 
 api.interceptors.request.use((config) => {

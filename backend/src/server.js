@@ -41,11 +41,16 @@ const io = new Server(server, {
   },
 
   /*
-   * CRÍTICO: Solo WebSocket, nunca polling.
-   * Polling causa retrasos porque espera a que
-   * el HTTP request complete antes de entregar el mensaje.
+   * Permitimos polling como respaldo y dejamos que Socket.io
+   * haga el upgrade a websocket automáticamente. Forzar SOLO
+   * websocket puede impedir la conexión por completo en redes,
+   * proxys o navegadores que no soportan el handshake directo
+   * por WS (esto puede ser la causa real de que algunos usuarios
+   * nunca reciban notificaciones en tiempo real, incluidos los
+   * estados nuevos de sus contactos). Una vez conectado, Socket.io
+   * sube a websocket igual, así que no se pierde la mejora de latencia.
    */
-  transports: ['websocket'],
+  transports: ['polling', 'websocket'],
 
   /*
    * Timeouts ajustados para Render (que puede ser lento
