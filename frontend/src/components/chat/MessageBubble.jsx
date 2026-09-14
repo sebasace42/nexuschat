@@ -39,7 +39,10 @@ const formatSize = (bytes) => {
 
 // ── Vista previa del estado al que se respondió ──────────────────
 const StatusReplyPreview = ({ statusReply, isOwn }) => {
-  if (!statusReply) return null;
+  // Se exige statusId (no solo que el objeto exista) porque mensajes
+  // guardados antes de este fix pueden tener el objeto "vacío" en la
+  // base de datos (statusId: null) — así tampoco se muestran esos.
+  if (!statusReply?.statusId) return null;
   return (
     <div className={`
       flex items-center gap-2 mx-2 mt-2 mb-1 p-1.5 rounded-lg

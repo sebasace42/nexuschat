@@ -47,12 +47,24 @@ const messageSchema = new mongoose.Schema({
   // Se guarda como "foto" del estado (no como referencia) porque
   // el estado original expira/se borra a las 24h y la respuesta
   // debe seguir mostrándose igual que en WhatsApp.
+  //
+  // OJO: se define como sub-schema real (new mongoose.Schema(...))
+  // y no como objeto plano. Con un objeto plano, Mongoose crea el
+  // campo con sus valores por defecto (statusId: null, etc.) en
+  // TODOS los mensajes aunque no sean respuesta a nada, y ese
+  // objeto "vacío" sigue siendo truthy en JS — por eso el preview
+  // aparecía en todos los mensajes. Con un sub-schema, el
+  // `default: null` de más abajo sí se respeta y el campo queda
+  // realmente en null cuando no se manda.
   statusReply: {
-    statusId: { type: mongoose.Schema.Types.ObjectId, ref: 'Status', default: null },
-    type:     { type: String, enum: ['text', 'image', 'video', null], default: null },
-    text:     { type: String, default: '' },
-    bgColor:  { type: String, default: null },
-    mediaUrl: { type: String, default: null },
+    type: new mongoose.Schema({
+      statusId: { type: mongoose.Schema.Types.ObjectId, ref: 'Status' },
+      type:     { type: String, enum: ['text', 'image', 'video'] },
+      text:     { type: String },
+      bgColor:  { type: String },
+      mediaUrl: { type: String },
+    }, { _id: false }),
+    default: null,
   },
 
 }, { timestamps: true });
