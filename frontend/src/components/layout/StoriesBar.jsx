@@ -225,21 +225,38 @@ const StoryViewer = ({ storyGroup, onClose, onNext, onPrev, hasPrev, hasNext, is
             </p>
           </div>
         ) : story?.type === 'image' ? (
-          <img src={story.mediaUrl} className="absolute inset-0 w-full h-full object-cover" alt="" />
+          <div className="absolute inset-0 bg-black overflow-hidden">
+            {/* Fondo: la misma foto ampliada y borrosa, rellena el espacio
+                que sobra cuando la imagen no es vertical (ej. capturas de PC) */}
+            <img
+              src={story.mediaUrl}
+              className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
+              alt=""
+              aria-hidden="true"
+            />
+            {/* Primer plano: la foto completa, sin recortar */}
+            <img
+              src={story.mediaUrl}
+              className="relative w-full h-full object-contain"
+              alt=""
+            />
+          </div>
         ) : story?.type === 'video' ? (
-          <video
-            ref={videoRef}
-            src={story.mediaUrl}
-            className="absolute inset-0 w-full h-full object-cover"
-            autoPlay
-            muted
-            playsInline
-            onTimeUpdate={(e) => {
-              const v = e.target;
-              if (v.duration) setProgress((v.currentTime / v.duration) * 100);
-            }}
-            onEnded={advance}
-          />
+          <div className="absolute inset-0 bg-black overflow-hidden">
+            <video
+              ref={videoRef}
+              src={story.mediaUrl}
+              className="relative w-full h-full object-contain"
+              autoPlay
+              muted
+              playsInline
+              onTimeUpdate={(e) => {
+                const v = e.target;
+                if (v.duration) setProgress((v.currentTime / v.duration) * 100);
+              }}
+              onEnded={advance}
+            />
+          </div>
         ) : null}
 
         {/* Caption en media */}
