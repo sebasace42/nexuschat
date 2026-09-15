@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Avatar from '../ui/Avatar';
 import api from '../../api/axios';
@@ -46,6 +46,62 @@ const SettingsModal = ({ onClose }) => {
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
   const [success, setSuccess]   = useState(false);
+
+  // ── Foto de perfil ─────────────────────────────────────────────
+  const [avatarUrl, setAvatarUrl]   = useState(user?.avatarUrl ?? null);
+  const [uploading, setUploading]   = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef(null);
+
+  const abrirSelectorFoto = () => fileInputRef.current?.click();
+
+  const manejarCambioFoto = async (e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+
+    if (!archivo.type.startsWith('image/')) {
+      setUploadError('Selecciona un archivo de imagen válido');
+      return;
+    }
+    if (archivo.size > 5 * 1024 * 1024) {
+      setUploadError('La imagen debe pesar menos de 5MB');
+      return;
+    }
+
+    setUploadError('');
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', archivo);
+
+      const { data } = await api.put('/users/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setAvatarUrl(data.avatarUrl);
+      updateUser(data); // se guarda de una, no hace falta tocar "Guardar"
+    } catch (err) {
+      console.error(err);
+      setUploadError(err.response?.data?.message ?? 'No se pudo subir la imagen, intenta de nuevo');
+    } finally {
+      setUploading(false);
+      e.target.value = ''; // permite volver a elegir el mismo archivo si falla
+    }
+  };
+
+  const quitarFoto = async () => {
+    setUploading(true);
+    try {
+      const { data } = await api.delete('/users/avatar');
+      setAvatarUrl(data.avatarUrl); // null
+      updateUser({ ...user, avatarUrl: null });
+    } catch (err) {
+      console.error(err);
+      setUploadError('No se pudo quitar la foto, intenta de nuevo');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // ── Notificaciones (guardadas en localStorage) ────────────────
   const [notifMessages,  setNotifMessages]  = useState(() =>
@@ -231,17 +287,66 @@ const SettingsModal = ({ onClose }) => {
           {view === 'edit' && (
             <>
               <div className="p-6 flex flex-col items-center gap-4 border-b border-white/5">
-                <Avatar user={{ ...user, username, avatarColor: color }} size={72} />
-                <div className="flex gap-2">
-                  {AVATAR_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setColor(c)}
-                      style={{ backgroundColor: c }}
-                      className={`w-7 h-7 rounded-full transition-transform ${color === c ? 'ring-2 ring-white ring-offset-2 ring-offset-panel scale-110' : 'hover:scale-105'}`}
+                <button
+                  onClick={abrirSelectorFoto}
+                  disabled={uploading}
+                  className="relative w-[72px] h-[72px] rounded-full group"
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Foto de perfil"
+                      className="w-full h-full rounded-full object-cover"
                     />
-                  ))}
-                </div>
+                  ) : (
+                    <Avatar user={{ ...user, username, avatarColor: color }} size={72} />
+                  )}
+
+                  <span className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    {uploading ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                    )}
+                  </span>
+                </button>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={manejarCambioFoto}
+                  className="hidden"
+                />
+
+                {uploadError && (
+                  <p className="text-xs text-accent-red -mt-2">{uploadError}</p>
+                )}
+
+                {!avatarUrl && (
+                  <div className="flex gap-2">
+                    {AVATAR_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setColor(c)}
+                        style={{ backgroundColor: c }}
+                        className={`w-7 h-7 rounded-full transition-transform ${color === c ? 'ring-2 ring-white ring-offset-2 ring-offset-panel scale-110' : 'hover:scale-105'}`}
+                      />
+                    ))}
+                  </div>
+                )}
+                {avatarUrl && (
+                  <button
+                    onClick={quitarFoto}
+                    disabled={uploading}
+                    className="text-xs text-text-muted hover:text-accent-red transition-colors disabled:opacity-50"
+                  >
+                    Quitar foto y usar avatar de color
+                  </button>
+                )}
               </div>
               <div className="p-6 space-y-4">
                 <div>

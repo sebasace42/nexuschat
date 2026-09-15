@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema({
   lastSeen:  { type: Date,    default: Date.now },
   bio:       { type: String,  default: '', maxlength: 100 },
 
+  // ── Foto de perfil (Cloudinary) ───────────────────────────────
+  avatarUrl:      { type: String, default: null }, // URL pública de la imagen
+  avatarPublicId: { type: String, default: null }, // public_id en Cloudinary (para poder borrarla)
+
   // ── Privacidad de visibilidad ─────────────────────────────────
   hideOnline:      { type: Boolean, default: false },
   hideLastSeen:    { type: Boolean, default: false },
