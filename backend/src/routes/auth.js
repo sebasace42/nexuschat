@@ -24,6 +24,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       _id: user._id, username: user.username,
       email: user.email, avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
       token: generateToken(user._id),
     });
   } catch (err) {
@@ -42,6 +43,7 @@ router.post('/login', async (req, res) => {
     res.json({
       _id: user._id, username: user.username,
       email: user.email, avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
       token: generateToken(user._id),
     });
   } catch (err) {
@@ -55,10 +57,13 @@ router.get('/me', protect, async (req, res) => {
     username:        req.user.username,
     email:           req.user.email,
     avatarColor:     req.user.avatarColor,
+    avatarUrl:       req.user.avatarUrl,       // ← faltaba esto (causa del bug)
+    avatarPublicId:  req.user.avatarPublicId,  // ← y esto, por consistencia
     bio:             req.user.bio ?? '',
     hideOnline:      req.user.hideOnline      ?? false,
     hideLastSeen:    req.user.hideLastSeen    ?? false,
     hideReadReceipt: req.user.hideReadReceipt ?? false,
+    isPrivate:       req.user.isPrivate       ?? false,
   });
 });
 
