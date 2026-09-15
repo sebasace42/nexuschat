@@ -48,7 +48,7 @@ router.post('/', protect, upload.single('file'), async (req, res) => {
 
     // Guardar mensaje en MongoDB
     let message = await Message.create(messageData);
-    message = await message.populate('sender', 'username avatarColor');
+    message = await message.populate('sender', 'username avatarColor avatarUrl');
 
     // Actualizar lastMessage de la conversación
     await Conversation.findByIdAndUpdate(conversationId, {
@@ -85,7 +85,7 @@ router.post('/gif', protect, async (req, res) => {
       mediaMimeType: 'image/gif',
     });
 
-    message = await message.populate('sender', 'username avatarColor');
+    message = await message.populate('sender', 'username avatarColor avatarUrl');
 
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: message._id,
@@ -121,7 +121,7 @@ router.post('/sticker', protect, async (req, res) => {
       mediaMimeType: 'image/gif',
     });
 
-    message = await message.populate('sender', 'username avatarColor');
+    message = await message.populate('sender', 'username avatarColor avatarUrl');
 
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: message._id,
