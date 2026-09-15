@@ -74,9 +74,10 @@ const SettingsModal = ({ onClose }) => {
       const formData = new FormData();
       formData.append('avatar', archivo);
 
-      const { data } = await api.put('/users/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // No fijamos el Content-Type a mano: axios/el navegador arman
+      // automáticamente "multipart/form-data; boundary=...", y ese
+      // boundary es indispensable para que Multer pueda parsear el archivo.
+      const { data } = await api.put('/users/avatar', formData);
 
       setAvatarUrl(data.avatarUrl);
       updateUser(data); // se guarda de una, no hace falta tocar "Guardar"
