@@ -131,6 +131,37 @@ const SettingsModal = ({ onClose }) => {
   const [savingAccount,  setSavingAccount]  = useState(false);
   const [accountSaved,   setAccountSaved]   = useState(false);
 
+  // ── Bloquear usuarios ──────────────────────────────────────────
+  const [showBlocked,    setShowBlocked]    = useState(false);
+  const [blockedUsers,   setBlockedUsers]   = useState([]);
+  const [loadingBlocked, setLoadingBlocked] = useState(false);
+  const [blockedError,   setBlockedError]   = useState('');
+  const [unblockingId,   setUnblockingId]   = useState(null);
+
+  // Carga la lista solo la primera vez que se abre el acordeón
+  useEffect(() => {
+    if (!showBlocked) return;
+    setLoadingBlocked(true);
+    setBlockedError('');
+    api.get('/users/blocked')
+      .then(({ data }) => setBlockedUsers(data))
+      .catch(() => setBlockedError('No se pudo cargar la lista de bloqueados'))
+      .finally(() => setLoadingBlocked(false));
+  }, [showBlocked]);
+
+  const handleUnblock = async (userId) => {
+    setUnblockingId(userId);
+    try {
+      await api.post(`/users/${userId}/unblock`);
+      setBlockedUsers((prev) => prev.filter((u) => u._id !== userId));
+    } catch (err) {
+      console.error('Error desbloqueando:', err);
+      alert('No se pudo desbloquear al usuario');
+    } finally {
+      setUnblockingId(null);
+    }
+  };
+
   // Guardar visibilidad (hideOnline, hideLastSeen, hideReadReceipt)
   const handleSavePrivacy = async () => {
     setSavingPrivacy(true);
@@ -513,7 +544,60 @@ const SettingsModal = ({ onClose }) => {
               {/* ── Próximamente ── */}
               <div>
                 <p className="text-xs text-text-muted uppercase tracking-wider mb-3">Próximamente</p>
-                {['Bloquear usuarios', 'Mensajes temporales', 'Modo invisible'].map((item) => (
+
+                {/* Bloquear usuarios — ya activo */}
+                <div className="border-b border-white/5">
+                  <button
+                    onClick={() => setShowBlocked((v) => !v)}
+                    className="w-full flex items-center justify-between py-3 hover:bg-white/3 transition-colors text-left"
+                  >
+                    <p className="text-sm text-text-primary">Bloquear usuarios</p>
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                      strokeLinecap="round" strokeLinejoin="round"
+                      className={`text-text-muted transition-transform duration-150 ${showBlocked ? 'rotate-90' : ''}`}
+                    >
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </button>
+
+                  {showBlocked && (
+                    <div className="pb-3">
+                      {loadingBlocked && (
+                        <div className="flex items-center justify-center py-4">
+                          <div className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                        </div>
+                      )}
+
+                      {!loadingBlocked && blockedError && (
+                        <p className="text-xs text-accent-red text-center py-3">{blockedError}</p>
+                      )}
+
+                      {!loadingBlocked && !blockedError && blockedUsers.length === 0 && (
+                        <p className="text-xs text-text-muted text-center py-3">
+                          No has bloqueado a nadie todavía.
+                        </p>
+                      )}
+
+                      {!loadingBlocked && !blockedError && blockedUsers.map((u) => (
+                        <div key={u._id} className="flex items-center gap-3 py-2">
+                          <Avatar user={{ ...u, avatarUrl: null }} size={30} />
+                          <p className="flex-1 text-sm text-text-primary truncate">{u.username}</p>
+                          <button
+                            onClick={() => handleUnblock(u._id)}
+                            disabled={unblockingId === u._id}
+                            className="text-xs font-semibold text-accent hover:text-accent-bright transition-colors disabled:opacity-50 flex-shrink-0"
+                          >
+                            {unblockingId === u._id ? 'Desbloqueando...' : 'Desbloquear'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Mensajes temporales / Modo invisible — siguen pendientes */}
+                {['Mensajes temporales', 'Modo invisible'].map((item) => (
                   <div key={item} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 opacity-40">
                     <p className="text-sm text-text-primary">{item}</p>
                     <span className="text-[10px] bg-white/10 text-text-muted px-2 py-0.5 rounded-full">Pronto</span>
