@@ -37,6 +37,16 @@ const userSchema = new mongoose.Schema({
   // Pública  → cualquier usuario puede escribir y ver estados
   isPrivate: { type: Boolean, default: false },
 
+  // ── Usuarios bloqueados ────────────────────────────────────────
+  // Lista de IDs de usuarios que ESTE usuario bloqueó.
+  // Si alguien está aquí: no puede escribirle, no ve su foto de
+  // perfil actualizada en el chat, y sus mensajes se ocultan.
+  blockedUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: [],
+  }],
+
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

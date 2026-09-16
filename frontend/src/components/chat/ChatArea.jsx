@@ -8,6 +8,7 @@ import Avatar        from '../ui/Avatar';
 import StatusDot     from '../ui/StatusDot';
 import { requestNotificationPermission, showIncomingMessageNotification } from '../../utils/notifications';
 import DeleteChatModal from '../modals/DeleteChatModal';
+import BlockUserModal  from '../modals/BlockUserModal';
 
 const ChatArea = ({ conversation, onBack }) => {
   const { user }                = useAuth();
@@ -23,17 +24,26 @@ const ChatArea = ({ conversation, onBack }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showOptions,     setShowOptions]     = useState(false);
   const [deletingChat,    setDeletingChat]    = useState(false);
+  const [showBlockModal,  setShowBlockModal]  = useState(false);
+  const [isBlocked,       setIsBlocked]       = useState(false);
+  const [blocking,        setBlocking]        = useState(false);
 
   const other         = conversation?.participants?.find((p) => p._id !== user._id);
   const isOtherOnline = onlineUsers.includes(other?._id);
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
   const filteredMessages = useMemo(() => {
-    if (!normalizedSearch) return messages;
-    return messages.filter((msg) =>
+    // Si tenemos bloqueado al otro usuario, ocultamos sus mensajes
+    // (los tuyos propios en ese chat se siguen viendo).
+    const base = isBlocked
+      ? messages.filter((msg) => msg.sender._id !== other?._id)
+      : messages;
+
+    if (!normalizedSearch) return base;
+    return base.filter((msg) =>
       msg.text?.toLowerCase().includes(normalizedSearch)
     );
-  }, [messages, normalizedSearch]);
+  }, [messages, normalizedSearch, isBlocked, other?._id]);
 
   // Cargar mensajes al cambiar de conversación
   useEffect(() => {
@@ -53,6 +63,14 @@ const ChatArea = ({ conversation, onBack }) => {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [conversation?._id]);
+
+  // Consultar si tenemos bloqueado al otro usuario de esta conversación
+  useEffect(() => {
+    if (!other?._id) { setIsBlocked(false); return; }
+    api.get(`/users/${other._id}/block-status`)
+      .then(({ data }) => setIsBlocked(!!data.blocked))
+      .catch(() => setIsBlocked(false));
+  }, [other?._id]);
 
   // Marcar mensajes como leídos al abrir el chat (→ doble check azul)
   useEffect(() => {
@@ -197,6 +215,34 @@ const ChatArea = ({ conversation, onBack }) => {
     }
   };
 
+  // Bloquear al usuario de esta conversación
+  const handleBlockUser = async () => {
+    if (!other?._id) return;
+    setBlocking(true);
+    try {
+      await api.post(`/users/${other._id}/block`);
+      setIsBlocked(true);
+    } catch (err) {
+      console.error('Error bloqueando usuario:', err);
+      alert('No se pudo bloquear al usuario');
+    } finally {
+      setBlocking(false);
+      setShowBlockModal(false);
+    }
+  };
+
+  // Desbloquear al usuario de esta conversación
+  const handleUnblockUser = async () => {
+    if (!other?._id) return;
+    try {
+      await api.post(`/users/${other._id}/unblock`);
+      setIsBlocked(false);
+    } catch (err) {
+      console.error('Error desbloqueando usuario:', err);
+      alert('No se pudo desbloquear al usuario');
+    }
+  };
+
   // Eliminar mensaje del estado local inmediatamente
   const handleDeleteMessage = (messageId) => {
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
@@ -247,8 +293,8 @@ const ChatArea = ({ conversation, onBack }) => {
 
         {/* Avatar con punto de estado */}
         <div className="relative flex-shrink-0">
-          <Avatar user={other} size={36} />
-          <StatusDot isOnline={isOtherOnline} size={11} borderColor="#1f2029" />
+          <Avatar user={isBlocked ? { ...other, avatarUrl: null } : other} size={36} />
+          {!isBlocked && <StatusDot isOnline={isOtherOnline} size={11} borderColor="#1f2029" />}
         </div>
 
         {/* Nombre y estado online */}
@@ -257,9 +303,11 @@ const ChatArea = ({ conversation, onBack }) => {
             {other?.username}
           </p>
           <p className="text-xs mt-0.5">
-            {isOtherOnline
-              ? <span className="text-accent-green">● En línea</span>
-              : <span className="text-text-muted">Desconectado</span>
+            {isBlocked
+              ? <span className="text-accent-red">Bloqueado</span>
+              : isOtherOnline
+                ? <span className="text-accent-green">● En línea</span>
+                : <span className="text-text-muted">Desconectado</span>
             }
           </p>
         </div>
@@ -291,6 +339,34 @@ const ChatArea = ({ conversation, onBack }) => {
                   rounded-xl shadow-2xl overflow-hidden
                   min-w-[180px]
                 ">
+                  <button
+                    onClick={() => {
+                      setShowOptions(false);
+                      if (isBlocked) handleUnblockUser();
+                      else setShowBlockModal(true);
+                    }}
+                    className="
+                      w-full flex items-center gap-3 px-4 py-3
+                      text-text-primary text-sm hover:bg-hover
+                      active:bg-white/10 transition-colors
+                    "
+                  >
+                    {isBlocked ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M4.9 4.9l14.2 14.2"/>
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="4.9" y1="19.1" x2="19.1" y2="4.9"/>
+                      </svg>
+                    )}
+                    {isBlocked ? 'Desbloquear usuario' : 'Bloquear usuario'}
+                  </button>
+
+                  <div className="h-px bg-white/5" />
+
                   <button
                     onClick={() => {
                       setShowOptions(false);
@@ -423,7 +499,24 @@ const ChatArea = ({ conversation, onBack }) => {
 
       {/* ══ INPUT DE MENSAJE ══ */}
       <div className="flex-shrink-0">
-        <MessageInput conversationId={conversation._id} />
+        {isBlocked && (
+          <div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-xl border border-accent-red/30 bg-accent-red/10 px-4 py-2.5">
+            <p className="text-xs text-accent-red">
+              Bloqueaste a {other?.username}. No puedes enviarle mensajes.
+            </p>
+            <button
+              onClick={handleUnblockUser}
+              className="text-xs font-semibold text-accent-red hover:underline flex-shrink-0"
+            >
+              Desbloquear
+            </button>
+          </div>
+        )}
+        <MessageInput
+          conversationId={conversation._id}
+          disabled={isBlocked}
+          disabledPlaceholder="No puedes enviarle mensajes a este contacto"
+        />
       </div>
 
       {/* Modal eliminar chat */}
@@ -433,6 +526,16 @@ const ChatArea = ({ conversation, onBack }) => {
           isDeleting={deletingChat}
           onClose={() => setShowDeleteModal(false)}
           onConfirm={handleDeleteChat}
+        />
+      )}
+
+      {/* Modal bloquear usuario */}
+      {showBlockModal && (
+        <BlockUserModal
+          contactName={other?.username}
+          isBlocking={blocking}
+          onClose={() => setShowBlockModal(false)}
+          onConfirm={handleBlockUser}
         />
       )}
 

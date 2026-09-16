@@ -75,6 +75,31 @@ const setupSocket = (io) => {
       if (!text?.trim() || !conversationId) return;
 
       try {
+        // ── Verificar bloqueo (en cualquiera de las 2 direcciones) ──
+        // Nunca confiar solo en que el frontend deshabilitó el input:
+        // si alguien intercepta el socket y emite igual, esto lo frena.
+        const conversationCheck = await Conversation.findById(conversationId).select('participants');
+        if (!conversationCheck) return;
+
+        const recipientId = conversationCheck.participants
+          .map((p) => p.toString())
+          .find((pid) => pid !== userId);
+
+        if (recipientId) {
+          const [me, recipient] = await Promise.all([
+            User.findById(userId).select('blockedUsers'),
+            User.findById(recipientId).select('blockedUsers'),
+          ]);
+
+          const iBlockedThem  = me?.blockedUsers?.some((u) => u.toString() === recipientId);
+          const theyBlockedMe = recipient?.blockedUsers?.some((u) => u.toString() === userId);
+
+          if (iBlockedThem || theyBlockedMe) {
+            socket.emit('error', { message: 'No puedes enviar mensajes a este usuario' });
+            return;
+          }
+        }
+
         // Crear mensaje en MongoDB
         let message = await Message.create({
           conversation: conversationId,

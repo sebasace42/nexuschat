@@ -166,4 +166,76 @@ router.patch('/privacy', protect, async (req, res) => {
   }
 });
 
+// ═════════════════════════════════════════════════════════════════════
+// POST /api/users/:id/block — bloquear a un usuario
+// ═════════════════════════════════════════════════════════════════════
+router.post('/:id/block', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (id === req.user._id.toString()) {
+      return res.status(400).json({ message: 'No puedes bloquearte a ti mismo' });
+    }
+
+    const targetExists = await User.exists({ _id: id });
+    if (!targetExists) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $addToSet: { blockedUsers: id },
+    });
+
+    res.json({ blocked: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// POST /api/users/:id/unblock — desbloquear a un usuario
+// ═════════════════════════════════════════════════════════════════════
+router.post('/:id/unblock', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { blockedUsers: id },
+    });
+
+    res.json({ blocked: false });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// GET /api/users/:id/block-status — ¿yo bloqueé a este usuario?
+// ═════════════════════════════════════════════════════════════════════
+router.get('/:id/block-status', protect, async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).select('blockedUsers');
+    const blocked = me.blockedUsers.some(
+      (u) => u.toString() === req.params.id
+    );
+    res.json({ blocked });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// GET /api/users/blocked — lista completa de usuarios bloqueados
+// (la usa la pantalla de Privacidad)
+// ═════════════════════════════════════════════════════════════════════
+router.get('/blocked', protect, async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id)
+      .populate('blockedUsers', 'username avatarColor avatarUrl');
+    res.json(me.blockedUsers);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

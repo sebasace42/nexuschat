@@ -4,7 +4,7 @@ import api from '../../api/axios';
 import MediaPicker   from './MediaPicker';
 import VoiceRecorder from './VoiceRecorder';
 
-const MessageInput = ({ conversationId, disabled }) => {
+const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
   const { socket }                = useSocket();
   const [text,        setText]        = useState('');
   const [showPicker,  setShowPicker]  = useState(false);
@@ -359,7 +359,7 @@ const MessageInput = ({ conversationId, disabled }) => {
               disabled={disabled || uploading}
               placeholder={
                 uploading ? 'Subiendo archivo...'  :
-                disabled  ? 'Selecciona una conversación...' :
+                disabled  ? (disabledPlaceholder || 'Selecciona una conversación...') :
                 preview   ? 'Agrega un mensaje (opcional)...' :
                 'Escribe un mensaje... (Enter para enviar)'
               }
