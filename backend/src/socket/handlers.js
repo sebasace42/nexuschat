@@ -227,6 +227,67 @@ const setupSocket = (io) => {
     });
 
     /*
+     * MARCAR MENSAJES COMO LEÍDOS
+     *
+     * El frontend emite esto al abrir un chat. Hasta ahora nadie lo
+     * escuchaba en el backend, por eso unreadCount nunca se reiniciaba
+     * en la base de datos: el badge desaparecía solo en el estado local
+     * de React, pero al refrescar volvía a traer el número viejo.
+     */
+    socket.on('message:read', async ({ conversationId }) => {
+      if (!conversationId) return;
+
+      try {
+        // Reiniciar el contador de no leídos de ESTE usuario, en la BD.
+        await Conversation.findByIdAndUpdate(conversationId, {
+          $set: { [`unreadCount.${userId}`]: 0 },
+        });
+
+        // Si el usuario oculta sus confirmaciones de lectura, reseteamos
+        // el contador (arriba) pero no delatamos que leyó los mensajes.
+        const me = await User.findById(userId).select('hideReadReceipt');
+        if (me?.hideReadReceipt) return;
+
+        // Mensajes de otros, en esta conversación, que yo no había leído
+        const unreadMessages = await Message.find({
+          conversation: conversationId,
+          sender:       { $ne: userId },
+          readBy:       { $ne: userId },
+        }).select('_id sender');
+
+        if (unreadMessages.length === 0) return;
+
+        await Message.updateMany(
+          { _id: { $in: unreadMessages.map((m) => m._id) } },
+          {
+            $addToSet: { readBy: userId },
+            $set:      { status: 'read', readAt: new Date() },
+          }
+        );
+
+        // Avisar en tiempo real a quien envió esos mensajes
+        // (para que le aparezca el doble check azul).
+        const senderIds = [...new Set(unreadMessages.map((m) => m.sender.toString()))];
+        const messageIds = unreadMessages.map((m) => m._id.toString());
+
+        senderIds.forEach((sid) => {
+          const sockets = onlineUsers.get(sid);
+          if (sockets) {
+            sockets.forEach((sockId) => {
+              io.to(sockId).emit('messages:read', {
+                conversationId,
+                readBy: userId,
+                messageIds,
+              });
+            });
+          }
+        });
+      } catch (err) {
+        console.error('❌ Error message:read:', err);
+      }
+    });
+
+    /*
      * ELIMINAR MENSAJE
      * Backend elimina de MongoDB y notifica a la sala.
      */
