@@ -8,6 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg'],
+      manifestFilename: 'manifest.json',
       manifest: {
         name: 'NexusChat',
         short_name: 'NexusChat',
