@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "dev.pages.nexuschat_elz.twa",
+    "sha256_cert_fingerprints": ["9B:31:26:9D:79:4F:AC:EC:85:27:A9:A0:8C:84:6E:73:15:6D:90:2D:EB:B5:67:61:7C:7C:51:30:94:F5:D6:02"]
+  }
+}]
