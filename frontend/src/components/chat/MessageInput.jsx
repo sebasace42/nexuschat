@@ -17,6 +17,7 @@ const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
   const typingRef     = useRef(null);
   const fileInputRef  = useRef(null);
   const imageInputRef = useRef(null);
+  const cameraInputRef  = useRef(null);
   const pickerButtonRef = useRef(null);
 
   // ── Auto-resize textarea ──────────────────────────────────────
@@ -253,6 +254,14 @@ const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
 
             {/* Inputs ocultos */}
             <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+            <input
               ref={imageInputRef}
               type="file"
               accept="image/*,video/*"
@@ -266,6 +275,19 @@ const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
               className="hidden"
               onChange={handleFileChange}
             />
+
+            {/* Botón cámara — abre la cámara del dispositivo directo (como WhatsApp/IG) */}
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={disabled || uploading}
+              title="Tomar foto"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors disabled:opacity-40"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>
 
             {/* Botón imagen/video */}
             <button
