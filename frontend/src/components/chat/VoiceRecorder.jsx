@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
+import { useToast } from '../ui/ToastContext';
 
 const VoiceRecorder = ({ onSend, onCancel }) => {
+  const { showToast } = useToast();
   const [seconds,    setSeconds]    = useState(0);
   const [recording,  setRecording]  = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -45,7 +47,7 @@ const VoiceRecorder = ({ onSend, onCancel }) => {
 
     } catch (err) {
       console.error('Error accediendo al micrófono:', err);
-      alert('No se pudo acceder al micrófono. Verifica los permisos.');
+      showToast('No se pudo acceder al micrófono. Verifica los permisos.', 'error');
       onCancel();
     }
   };
