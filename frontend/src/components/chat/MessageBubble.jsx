@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
 import Avatar from '../ui/Avatar';
+import { useToast } from '../ui/ToastContext';
+import DeleteMessagesModal from '../modals/DeleteMessagesModal';
 
 const QUICK_EMOJIS = ['👍','❤️','😂','🔥','😮','👏'];
 
@@ -255,8 +257,10 @@ const MediaContent = ({ message, isOwn }) => {
 
 const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, isSelected = false, onToggleSelect = () => {}, selectionMode = false }) => {
   const { socket }              = useSocket();
+  const { showToast } = useToast();
   const [showMenu, setShowMenu] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const menuRef = useRef(null);
 
   // Funciones para selección de mensajes
@@ -287,9 +291,14 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
   };
 
   // ── Eliminar mensaje ──────────────────────────────
-  const handleDelete = async () => {
+  // Ya no usa window.confirm (se ve como popup del navegador).
+  // handleDelete solo abre el modal propio; performDelete hace el borrado real.
+  const handleDelete = () => {
     setShowMenu(false);
-    if (!window.confirm('¿Eliminar este mensaje?')) return;
+    setShowConfirmDelete(true);
+  };
+
+  const performDelete = async () => {
     setDeleting(true);
     try {
       const { data } = await api.delete(`/messages/${message._id}`);
@@ -298,9 +307,10 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
         conversationId: data.conversationId,
       });
       onDelete?.(message._id);
+      setShowConfirmDelete(false);
     } catch (err) {
       console.error('Error eliminando:', err);
-      alert('No se pudo eliminar el mensaje');
+      showToast('No se pudo eliminar el mensaje', 'error');
     } finally {
       setDeleting(false);
     }
@@ -642,6 +652,16 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
 
       </div>
       {/* Fin columna principal */}
+
+      {/* Modal propio de confirmación (reemplaza window.confirm) */}
+      {showConfirmDelete && (
+        <DeleteMessagesModal
+          count={1}
+          isDeleting={deleting}
+          onClose={() => setShowConfirmDelete(false)}
+          onConfirm={performDelete}
+        />
+      )}
 
     </div>
   );
