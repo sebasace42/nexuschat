@@ -1,5 +1,6 @@
 import { useAuth }        from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ToastProvider }  from './context/ToastContext'; // ajusta la ruta real
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 
@@ -17,12 +18,16 @@ const App = () => {
     );
   }
 
-  return user ? (
-    <SocketProvider>
-      <ChatPage />
-    </SocketProvider>
-  ) : (
-    <AuthPage />
+  return (
+    <ToastProvider>
+      {user ? (
+        <SocketProvider>
+          <ChatPage />
+        </SocketProvider>
+      ) : (
+        <AuthPage />
+      )}
+    </ToastProvider>
   );
 };
 export default App;
