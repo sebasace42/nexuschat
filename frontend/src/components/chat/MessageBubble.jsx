@@ -263,6 +263,25 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const menuRef = useRef(null);
 
+  // ══════════════════════════════════════════════════════════════
+  // FIX CRÍTICO — Guardia contra message null/undefined
+  //
+  // Este return DEBE ir después de todos los hooks (useState/useRef)
+  // para no romper las reglas de hooks, pero ANTES de cualquier
+  // acceso a "message.algo".
+  //
+  // Por qué pasaba pantalla negra en TODAS las conversaciones:
+  // si en el array de mensajes llega un item null/undefined (por
+  // ejemplo, una carrera entre el fetch inicial y un evento de
+  // socket que borra/reemplaza el array, o un mensaje cuyo
+  // populate falló en el backend), la línea que hacía
+  // `new Date(message.createdAt)` explotaba con
+  // "Cannot read properties of undefined". Como no hay Error
+  // Boundary en la app, React desmonta TODO el árbol en vez de
+  // solo esa burbuja, y queda la pantalla completamente negra.
+  // ══════════════════════════════════════════════════════════════
+  if (!message) return null;
+
   // Funciones para selección de mensajes
   const handleMessageClick = (e) => {
     if (!isOwn) return;
@@ -322,8 +341,13 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
     return acc;
   }, {});
 
-  const time = new Date(message.createdAt)
-    .toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  // FIX: fecha defensiva — si createdAt viene ausente o corrupto,
+  // ya no truena toLocaleTimeString sobre un Date inválido a ciegas,
+  // simplemente muestra '--:--' en vez de romper el render.
+  const createdDate = message.createdAt ? new Date(message.createdAt) : null;
+  const time = createdDate && !isNaN(createdDate.getTime())
+    ? createdDate.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+    : '--:--';
 
   return (
     <div
