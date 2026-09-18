@@ -9,6 +9,7 @@ import StatusDot     from '../ui/StatusDot';
 import { requestNotificationPermission, showIncomingMessageNotification } from '../../utils/notifications';
 import DeleteChatModal from '../modals/DeleteChatModal';
 import BlockUserModal  from '../modals/BlockUserModal';
+import DeleteMessagesModal from '../modals/DeleteMessagesModal';
 
 const ChatArea = ({ conversation, onBack }) => {
   const { user }                = useAuth();
@@ -27,6 +28,9 @@ const ChatArea = ({ conversation, onBack }) => {
   const [showBlockModal,  setShowBlockModal]  = useState(false);
   const [isBlocked,       setIsBlocked]       = useState(false);
   const [blocking,        setBlocking]        = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState(new Set());
+  const [showDeleteMessagesModal, setShowDeleteMessagesModal] = useState(false);
+  const [deletingMultiple, setDeletingMultiple] = useState(false);
 
   const other         = conversation?.participants?.find((p) => p._id !== user._id);
   const isOtherOnline = onlineUsers.includes(other?._id);
@@ -117,6 +121,52 @@ const ChatArea = ({ conversation, onBack }) => {
     } finally {
       setDeletingChat(false);
       setShowDeleteModal(false);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────────
+  // FUNCIONES PARA ELIMINACIÓN MÚLTIPLE DE MENSAJES
+  // ──────────────────────────────────────────────────────────────────
+  const toggleMessageSelection = (messageId) => {
+    const newSelected = new Set(selectedMessages);
+    if (newSelected.has(messageId)) {
+      newSelected.delete(messageId);
+    } else {
+      newSelected.add(messageId);
+    }
+    setSelectedMessages(newSelected);
+  };
+
+  const handleDeleteMultipleClick = () => {
+    if (selectedMessages.size > 0) {
+      setShowDeleteMessagesModal(true);
+    }
+  };
+
+  const confirmDeleteMultiple = async () => {
+    if (selectedMessages.size === 0) return;
+
+    setDeletingMultiple(true);
+    try {
+      const messageIds = Array.from(selectedMessages);
+      await api.delete(`/conversations/${conversation._id}/messages`, {
+        data: {
+          messageIds,
+        },
+      });
+
+      setMessages((prev) =>
+        prev.filter((m) => !selectedMessages.has(m._id))
+      );
+
+      setSelectedMessages(new Set());
+      setShowDeleteMessagesModal(false);
+
+    } catch (err) {
+      console.error('Error eliminando múltiples mensajes:', err);
+      alert('No se pudo eliminar los mensajes');
+    } finally {
+      setDeletingMultiple(false);
     }
   };
 
@@ -392,6 +442,32 @@ const ChatArea = ({ conversation, onBack }) => {
         </div>
       </div>
 
+      {/* ══ BARRA DE SELECCIÓN ══ */}
+      {selectedMessages.size > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-accent/10 border-b border-accent/20">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 bg-accent text-white px-3 py-1 rounded-full text-xs font-semibold">
+              {selectedMessages.size}
+            </span>
+            <span className="text-sm text-text-secondary">
+              {selectedMessages.size === 1 ? 'mensaje' : 'mensajes'} seleccionado{selectedMessages.size === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <button
+            onClick={handleDeleteMultipleClick}
+            className="flex items-center gap-2 bg-accent-red hover:bg-accent-red/90 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors active:scale-95"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/>
+            </svg>
+            Eliminar
+          </button>
+        </div>
+      )}
+
       {/* ══ ÁREA DE MENSAJES ══ */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
 
@@ -476,6 +552,9 @@ const ChatArea = ({ conversation, onBack }) => {
             conversationId={conversation._id}
             showAvatar={showAvatar(filteredMessages, i)}
             onDelete={handleDeleteMessage}
+            isSelected={selectedMessages.has(msg._id)}
+            onToggleSelect={toggleMessageSelection}
+            selectionMode={selectedMessages.size > 0}
           />
         ))}
 
@@ -536,6 +615,16 @@ const ChatArea = ({ conversation, onBack }) => {
           isBlocking={blocking}
           onClose={() => setShowBlockModal(false)}
           onConfirm={handleBlockUser}
+        />
+      )}
+
+      {/* Modal eliminar múltiples mensajes */}
+      {showDeleteMessagesModal && (
+        <DeleteMessagesModal
+          count={selectedMessages.size}
+          isDeleting={deletingMultiple}
+          onClose={() => setShowDeleteMessagesModal(false)}
+          onConfirm={confirmDeleteMultiple}
         />
       )}
 

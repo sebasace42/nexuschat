@@ -253,10 +253,28 @@ const MediaContent = ({ message, isOwn }) => {
   );
 };
 
-const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete }) => {
+const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, isSelected = false, onToggleSelect = () => {}, selectionMode = false }) => {
   const { socket }              = useSocket();
   const [showMenu, setShowMenu] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const menuRef = useRef(null);
+
+  // Funciones para selección de mensajes
+  const handleMessageClick = (e) => {
+    if (!isOwn) return;
+    if (selectionMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggleSelect(message._id);
+    }
+  };
+
+  const handleContextMenu = (e) => {
+    if (!isOwn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onToggleSelect(message._id);
+  };
 
   // ── Reaccionar con emoji ──────────────────────────
   const handleReact = (emoji) => {
@@ -303,8 +321,26 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete })
         flex gap-2 group relative
         ${isOwn ? 'flex-row-reverse' : 'flex-row'}
         ${showAvatar ? 'mt-3' : 'mt-0.5'}
+        ${isSelected ? 'bg-accent/10 rounded-2xl px-2 py-1' : ''}
+        ${isOwn && !selectionMode ? 'cursor-pointer transition-colors hover:bg-white/2' : ''}
+        ${selectionMode && isOwn ? 'cursor-pointer' : ''}
       `}
+      onClick={handleMessageClick}
+      onContextMenu={handleContextMenu}
     >
+      {/* Checkbox en modo selección */}
+      {selectionMode && isOwn && (
+        <div className="flex items-start pt-2 flex-shrink-0">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(message._id)}
+            className="w-5 h-5 accent-accent cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       {/* Avatar — solo primer mensaje del bloque */}
       <div className="w-9 flex-shrink-0 flex items-end">
         {showAvatar && !isOwn && (
