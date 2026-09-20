@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import Avatar from '../ui/Avatar';
 import { useToast } from '../ui/ToastContext';
@@ -255,32 +256,37 @@ const MediaContent = ({ message, isOwn }) => {
   );
 };
 
-const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, isSelected = false, onToggleSelect = () => {}, selectionMode = false }) => {
+const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, onStarChange, isSelected = false, onToggleSelect = () => {}, selectionMode = false }) => {
   const { socket }              = useSocket();
+  const { user }                 = useAuth();
   const { showToast } = useToast();
   const [showMenu, setShowMenu] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [starring, setStarring] = useState(false);
   const menuRef = useRef(null);
 
-  // ══════════════════════════════════════════════════════════════
-  // FIX CRÍTICO — Guardia contra message null/undefined
-  //
-  // Este return DEBE ir después de todos los hooks (useState/useRef)
-  // para no romper las reglas de hooks, pero ANTES de cualquier
-  // acceso a "message.algo".
-  //
-  // Por qué pasaba pantalla negra en TODAS las conversaciones:
-  // si en el array de mensajes llega un item null/undefined (por
-  // ejemplo, una carrera entre el fetch inicial y un evento de
-  // socket que borra/reemplaza el array, o un mensaje cuyo
-  // populate falló en el backend), la línea que hacía
-  // `new Date(message.createdAt)` explotaba con
-  // "Cannot read properties of undefined". Como no hay Error
-  // Boundary en la app, React desmonta TODO el árbol en vez de
-  // solo esa burbuja, y queda la pantalla completamente negra.
-  // ══════════════════════════════════════════════════════════════
-  if (!message) return null;
+  // ── Destacados ─────────────────────────────────────
+  // starredBy viene como array de ids (string u ObjectId) del backend.
+  const isStarred = (message.starredBy || []).some(
+    (u) => (u?._id || u)?.toString() === user._id
+  );
+
+  const handleToggleStar = async () => {
+    setShowMenu(false);
+    setStarring(true);
+    try {
+      const { data } = await api.post(
+        `/conversations/${conversationId}/messages/${message._id}/star`
+      );
+      onStarChange?.(message._id, data.starred, user._id);
+    } catch (err) {
+      console.error('Error destacando mensaje:', err);
+      showToast('No se pudo destacar el mensaje', 'error');
+    } finally {
+      setStarring(false);
+    }
+  };
 
   // Funciones para selección de mensajes
   const handleMessageClick = (e) => {
@@ -343,13 +349,8 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
     return acc;
   }, {});
 
-  // FIX: fecha defensiva — si createdAt viene ausente o corrupto,
-  // ya no truena toLocaleTimeString sobre un Date inválido a ciegas,
-  // simplemente muestra '--:--' en vez de romper el render.
-  const createdDate = message.createdAt ? new Date(message.createdAt) : null;
-  const time = createdDate && !isNaN(createdDate.getTime())
-    ? createdDate.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
-    : '--:--';
+  const time = new Date(message.createdAt)
+    .toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div
@@ -494,6 +495,38 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
                       </div>
                     </div>
 
+                    {/* Opción destacar — cualquier mensaje, propio o ajeno */}
+                    <button
+                      onClick={handleToggleStar}
+                      disabled={starring}
+                      className="
+                        w-full flex items-center gap-3
+                        px-4 py-3
+                        text-text-primary text-sm font-medium
+                        hover:bg-hover active:bg-active
+                        transition-colors
+                        disabled:opacity-50
+                      "
+                    >
+                      {starring ? (
+                        <div className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                      ) : (
+                        <svg
+                          width="16" height="16"
+                          viewBox="0 0 24 24"
+                          fill={isStarred ? 'currentColor' : 'none'}
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={isStarred ? 'text-yellow-400' : ''}
+                        >
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                      )}
+                      {isStarred ? 'Quitar de destacados' : 'Destacar mensaje'}
+                    </button>
+
                     {/* Opción eliminar — solo mensajes propios */}
                     {isOwn && (
                       <button
@@ -636,6 +669,11 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
             {/* Hora + estado — solo mensajes propios */}
             {isOwn && (
               <div className="flex items-center gap-1 pb-1.5 pr-3 justify-end">
+                {isStarred && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-yellow-400">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                )}
                 <span className="text-[10px] text-white/50">{time}</span>
                 <MessageStatus status={message.status ?? 'sent'} />
               </div>
@@ -643,7 +681,12 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
 
             {/* Hora — mensajes de otros (sin check) */}
             {!isOwn && !message.mediaUrl && (
-              <div className="px-4 pb-1.5 -mt-1.5">
+              <div className="px-4 pb-1.5 -mt-1.5 flex items-center gap-1">
+                {isStarred && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-yellow-400">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                )}
                 <span className="text-[10px] text-text-muted">{time}</span>
               </div>
             )}

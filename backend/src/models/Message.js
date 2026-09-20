@@ -43,6 +43,15 @@ const messageSchema = new mongoose.Schema({
     ref: 'User',
   }],
 
+  // ── Mensajes destacados (estilo WhatsApp) ────────────────────
+  // Cada usuario puede destacar cualquier mensaje (propio o ajeno)
+  // de forma independiente. No es un campo global "isStarred": es
+  // una lista de quiénes lo destacaron, igual que readBy/reactions.
+  starredBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  }],
+
   // ── Respuesta a un estado/historia ───────────────────────────
   // Se guarda como "foto" del estado (no como referencia) porque
   // el estado original expira/se borra a las 24h y la respuesta

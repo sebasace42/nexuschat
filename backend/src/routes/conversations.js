@@ -28,6 +28,28 @@ router.get('/', protect, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
+// GET /api/conversations/starred/messages — Todos tus mensajes destacados
+// (de todas tus conversaciones, como la pantalla "Mensajes destacados"
+// de WhatsApp). OJO: esta ruta va ANTES de GET /:id para que Express no
+// interprete "starred" como un :id de conversación.
+// ═════════════════════════════════════════════════════════════════════
+router.get('/starred/messages', protect, async (req, res) => {
+  try {
+    const messages = await Message.find({ starredBy: req.user._id })
+      .sort({ createdAt: -1 })
+      .populate('sender', 'username avatarColor avatarUrl')
+      .populate({
+        path: 'conversation',
+        populate: { path: 'participants', select: 'username avatarColor avatarUrl' },
+      });
+
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
 // GET /api/conversations/:id — Una conversación puntual
 // (la usa el Sidebar cuando llega conversation:updated de un chat nuevo)
 // ═════════════════════════════════════════════════════════════════════
@@ -284,6 +306,53 @@ router.delete('/:id/messages', protect, async (req, res) => {
       deletedIds: messageIds,
       conversationId: id,
       deletedCount: result.deletedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// POST /api/conversations/:id/messages/:messageId/star — Destacar / quitar
+// Alterna: si ya lo destacaste, lo quita; si no, lo destaca.
+// Cualquier participante puede destacar cualquier mensaje (propio o ajeno).
+// ═════════════════════════════════════════════════════════════════════
+router.post('/:id/messages/:messageId/star', protect, async (req, res) => {
+  try {
+    const { id, messageId } = req.params;
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversación no encontrada' });
+    }
+
+    const userId = req.user._id.toString();
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === userId
+    );
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+
+    const message = await Message.findOne({ _id: messageId, conversation: id });
+    if (!message) {
+      return res.status(404).json({ message: 'Mensaje no encontrado' });
+    }
+
+    const alreadyStarred = message.starredBy.map(String).includes(userId);
+
+    if (alreadyStarred) {
+      message.starredBy = message.starredBy.filter((u) => u.toString() !== userId);
+    } else {
+      message.starredBy.push(req.user._id);
+    }
+    await message.save();
+
+    res.json({
+      ok: true,
+      starred: !alreadyStarred,
+      messageId: message._id,
+      conversationId: id,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

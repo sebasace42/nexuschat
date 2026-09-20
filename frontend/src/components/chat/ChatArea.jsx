@@ -10,8 +10,11 @@ import { requestNotificationPermission, showIncomingMessageNotification } from '
 import DeleteChatModal from '../modals/DeleteChatModal';
 import BlockUserModal  from '../modals/BlockUserModal';
 import DeleteMessagesModal from '../modals/DeleteMessagesModal';
+import StarredMessagesModal from '../modals/StarredMessagesModal';
+import { useToast } from '../ui/ToastContext';
 
 const ChatArea = ({ conversation, onBack }) => {
+  const { showToast }           = useToast();
   const { user }                = useAuth();
   const { socket, onlineUsers } = useSocket();
   const [messages,    setMessages]    = useState([]);
@@ -24,6 +27,7 @@ const ChatArea = ({ conversation, onBack }) => {
   const bottomRef = useRef(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showOptions,     setShowOptions]     = useState(false);
+  const [showStarredModal, setShowStarredModal] = useState(false);
   const [deletingChat,    setDeletingChat]    = useState(false);
   const [showBlockModal,  setShowBlockModal]  = useState(false);
   const [isBlocked,       setIsBlocked]       = useState(false);
@@ -32,7 +36,7 @@ const ChatArea = ({ conversation, onBack }) => {
   const [showDeleteMessagesModal, setShowDeleteMessagesModal] = useState(false);
   const [deletingMultiple, setDeletingMultiple] = useState(false);
 
-  const other         = conversation?.participants?.find((p) => p._id !== user?._id);
+  const other         = conversation?.participants?.find((p) => p._id !== user._id);
   const isOtherOnline = onlineUsers.includes(other?._id);
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -40,7 +44,7 @@ const ChatArea = ({ conversation, onBack }) => {
     // Si tenemos bloqueado al otro usuario, ocultamos sus mensajes
     // (los tuyos propios en ese chat se siguen viendo).
     const base = isBlocked
-      ? messages.filter((msg) => msg.sender?._id !== other?._id)
+      ? messages.filter((msg) => msg.sender._id !== other?._id)
       : messages;
 
     if (!normalizedSearch) return base;
@@ -117,7 +121,7 @@ const ChatArea = ({ conversation, onBack }) => {
 
     } catch (err) {
       console.error('Error eliminando chat:', err);
-      alert('No se pudo eliminar el chat');
+      showToast('No se pudo eliminar el chat', 'error');
     } finally {
       setDeletingChat(false);
       setShowDeleteModal(false);
@@ -164,7 +168,7 @@ const ChatArea = ({ conversation, onBack }) => {
 
     } catch (err) {
       console.error('Error eliminando múltiples mensajes:', err);
-      alert('No se pudo eliminar los mensajes');
+      showToast('No se pudo eliminar los mensajes', 'error');
     } finally {
       setDeletingMultiple(false);
     }
@@ -243,7 +247,7 @@ const ChatArea = ({ conversation, onBack }) => {
   // Agrupar mensajes del mismo usuario
   const showAvatar = (msgs, i) => {
     if (i === 0) return true;
-    if (msgs[i - 1].sender?._id !== msgs[i].sender?._id) return true;
+    if (msgs[i - 1].sender._id !== msgs[i].sender._id) return true;
     return (new Date(msgs[i].createdAt) - new Date(msgs[i - 1].createdAt)) / 60000 > 5;
   };
 
@@ -274,7 +278,7 @@ const ChatArea = ({ conversation, onBack }) => {
       setIsBlocked(true);
     } catch (err) {
       console.error('Error bloqueando usuario:', err);
-      alert('No se pudo bloquear al usuario');
+      showToast('No se pudo bloquear al usuario', 'error');
     } finally {
       setBlocking(false);
       setShowBlockModal(false);
@@ -289,13 +293,44 @@ const ChatArea = ({ conversation, onBack }) => {
       setIsBlocked(false);
     } catch (err) {
       console.error('Error desbloqueando usuario:', err);
-      alert('No se pudo desbloquear al usuario');
+      showToast('No se pudo desbloquear al usuario', 'error');
     }
   };
 
   // Eliminar mensaje del estado local inmediatamente
   const handleDeleteMessage = (messageId) => {
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
+  };
+
+  // Actualizar starredBy localmente al destacar/quitar un mensaje
+  const handleStarChange = (messageId, starred, userId) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m._id !== messageId) return m;
+        const current = m.starredBy || [];
+        const next = starred
+          ? [...current, userId]
+          : current.filter((u) => (u?._id || u)?.toString() !== userId);
+        return { ...m, starredBy: next };
+      })
+    );
+  };
+
+  const starredInThisChat = messages.filter((m) =>
+    (m.starredBy || []).some((u) => (u?._id || u)?.toString() === user._id)
+  );
+
+  // Quitar destacado desde el modal de destacados (mismo endpoint, toggle)
+  const handleUnstar = async (messageId) => {
+    try {
+      const { data } = await api.post(
+        `/conversations/${conversation._id}/messages/${messageId}/star`
+      );
+      handleStarChange(messageId, data.starred, user._id);
+    } catch (err) {
+      console.error('Error quitando destacado:', err);
+      showToast('No se pudo quitar de destacados', 'error');
+    }
   };
 
   // Pantalla vacía cuando no hay conversación seleccionada
@@ -364,6 +399,16 @@ const ChatArea = ({ conversation, onBack }) => {
 
         {/* Botones de acción */}
         <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => setShowStarredModal(true)}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-hover transition-colors"
+            title="Mensajes destacados"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+
           <div className="relative">
             <button
               onClick={() => setShowOptions((v) => !v)}
@@ -548,10 +593,11 @@ const ChatArea = ({ conversation, onBack }) => {
           <MessageBubble
             key={msg._id}
             message={msg}
-            isOwn={msg.sender?._id === user?._id}
+            isOwn={msg.sender._id === user._id}
             conversationId={conversation._id}
             showAvatar={showAvatar(filteredMessages, i)}
             onDelete={handleDeleteMessage}
+            onStarChange={handleStarChange}
             isSelected={selectedMessages.has(msg._id)}
             onToggleSelect={toggleMessageSelection}
             selectionMode={selectedMessages.size > 0}
@@ -625,6 +671,18 @@ const ChatArea = ({ conversation, onBack }) => {
           isDeleting={deletingMultiple}
           onClose={() => setShowDeleteMessagesModal(false)}
           onConfirm={confirmDeleteMultiple}
+        />
+      )}
+
+      {/* Modal destacados de este chat */}
+      {showStarredModal && (
+        <StarredMessagesModal
+          messages={starredInThisChat}
+          currentUserId={user._id}
+          onClose={() => setShowStarredModal(false)}
+          onUnstar={handleUnstar}
+          showChatName={false}
+          title="Destacados en este chat"
         />
       )}
 
