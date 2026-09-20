@@ -301,9 +301,11 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, i
   const performDelete = async () => {
     setDeleting(true);
     try {
-      const { data } = await api.delete(`/messages/${message._id}`);
+      const { data } = await api.delete(`/conversations/${conversationId}/messages`, {
+        data: { messageIds: [message._id] },
+      });
       socket?.emit('message:delete', {
-        messageId:      data.messageId,
+        messageIds:     data.deletedIds,
         conversationId: data.conversationId,
       });
       onDelete?.(message._id);
