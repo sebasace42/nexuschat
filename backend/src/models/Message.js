@@ -76,6 +76,36 @@ const messageSchema = new mongoose.Schema({
     default: null,
   },
 
+  // ── Encuestas (estilo WhatsApp) ───────────────────────────────
+  poll: {
+    type: new mongoose.Schema({
+      question:      { type: String, required: true, maxlength: 300 },
+      allowMultiple: { type: Boolean, default: false },
+      options: [{
+        text:  { type: String, required: true, maxlength: 100 },
+        votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      }],
+    }, { _id: false }),
+    default: null,
+  },
+
+  // ── Encuestas (estilo WhatsApp) ───────────────────────────────
+  // Un mensaje "encuesta" no tiene texto normal: tiene pregunta,
+  // opciones y quién votó por cada una. Cada opción es un sub-doc
+  // con su propio _id (Mongoose lo genera solo) para poder votar
+  // por option._id sin ambigüedad.
+  poll: {
+    type: new mongoose.Schema({
+      question: { type: String, required: true, maxlength: 300 },
+      options: [{
+        text:  { type: String, required: true, maxlength: 100 },
+        votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      }],
+      allowMultiple: { type: Boolean, default: false },
+    }, { _id: false }),
+    default: null,
+  },
+
 }, { timestamps: true });
  
 messageSchema.index({ conversation: 1, sender: 1, status: 1 });

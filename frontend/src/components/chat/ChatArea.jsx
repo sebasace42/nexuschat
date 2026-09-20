@@ -227,12 +227,20 @@ const ChatArea = ({ conversation, onBack }) => {
       setMessages((prev) => prev.filter((m) => m._id !== messageId));
     };
 
+    // Encuesta actualizada (alguien votó o quitó su voto)
+    const onPollUpdated = ({ messageId, poll }) => {
+      setMessages((prev) =>
+        prev.map((m) => m._id === messageId ? { ...m, poll } : m)
+      );
+    };
+
     socket.on('message:new',      onMsg);
     socket.on('message:status',   onStatus);
     socket.on('message:reaction', onReact);
     socket.on('typing:start',     onTypingStart);
     socket.on('typing:stop',      onTypingStop);
     socket.on('message:deleted',  onDeleted);
+    socket.on('poll:updated',     onPollUpdated);
 
     return () => {
       socket.off('message:new',      onMsg);
@@ -241,6 +249,7 @@ const ChatArea = ({ conversation, onBack }) => {
       socket.off('typing:start',     onTypingStart);
       socket.off('typing:stop',      onTypingStop);
       socket.off('message:deleted',  onDeleted);
+      socket.off('poll:updated',     onPollUpdated);
     };
   }, [socket, conversation?._id]);
 

@@ -256,6 +256,74 @@ const MediaContent = ({ message, isOwn }) => {
   );
 };
 
+// ── Contenido de una encuesta dentro de la burbuja ─────────────────
+const PollContent = ({ poll, isOwn, currentUserId, onVote }) => {
+  const totalVotes = poll.options.reduce((sum, o) => sum + o.votes.length, 0);
+
+  return (
+    <div className="px-4 py-3 min-w-[220px]">
+      <div className="flex items-center gap-2 mb-3">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-70">
+          <path d="M21 21H3" /><path d="M7 21V10" /><path d="M13 21V4" /><path d="M19 21v-7" />
+        </svg>
+        <p className="text-sm font-semibold">{poll.question}</p>
+      </div>
+
+      <div className="space-y-1.5">
+        {poll.options.map((opt) => {
+          const votesCount = opt.votes.length;
+          const pct = totalVotes > 0 ? Math.round((votesCount / totalVotes) * 100) : 0;
+          const votedByMe = opt.votes.some(
+            (v) => (v?._id || v)?.toString() === currentUserId
+          );
+
+          return (
+            <button
+              key={opt._id}
+              onClick={() => onVote(opt._id)}
+              className={`
+                w-full text-left rounded-xl px-3 py-2 relative overflow-hidden
+                border transition-colors
+                ${votedByMe
+                  ? 'border-accent bg-accent/15'
+                  : `border-white/10 ${isOwn ? 'hover:bg-white/10' : 'hover:bg-hover'}`}
+              `}
+            >
+              {/* Barra de progreso de fondo */}
+              {totalVotes > 0 && (
+                <div
+                  className="absolute inset-y-0 left-0 bg-accent/10"
+                  style={{ width: `${pct}%` }}
+                />
+              )}
+              <div className="relative flex items-center justify-between gap-2">
+                <span className="text-sm flex items-center gap-1.5 min-w-0">
+                  {votedByMe && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                  <span className="truncate">{opt.text}</span>
+                </span>
+                {totalVotes > 0 && (
+                  <span className="text-[11px] text-text-muted flex-shrink-0">{pct}%</span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-text-muted mt-2">
+        {totalVotes === 0
+          ? 'Nadie ha votado todavía'
+          : `${totalVotes} voto${totalVotes === 1 ? '' : 's'}`}
+        {poll.allowMultiple && ' · Varias respuestas permitidas'}
+      </p>
+    </div>
+  );
+};
+
 const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, onStarChange, isSelected = false, onToggleSelect = () => {}, selectionMode = false }) => {
   const { socket }              = useSocket();
   const { user }                 = useAuth();
@@ -286,6 +354,14 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, o
     } finally {
       setStarring(false);
     }
+  };
+
+  const handleVote = (optionId) => {
+    socket?.emit('poll:vote', {
+      messageId: message._id,
+      optionId,
+      conversationId,
+    });
   };
 
   // Funciones para selección de mensajes
@@ -651,6 +727,16 @@ const MessageBubble = ({ message, isOwn, conversationId, showAvatar, onDelete, o
           `}>
             {/* Respuesta a un estado */}
             <StatusReplyPreview statusReply={message.statusReply} isOwn={isOwn} />
+
+            {/* Encuesta */}
+            {message.poll && (
+              <PollContent
+                poll={message.poll}
+                isOwn={isOwn}
+                currentUserId={user._id}
+                onVote={handleVote}
+              />
+            )}
 
             {/* Contenido multimedia */}
             {message.mediaUrl && (

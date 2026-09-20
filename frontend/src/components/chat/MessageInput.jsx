@@ -3,12 +3,15 @@ import { useSocket } from '../../context/SocketContext';
 import api from '../../api/axios';
 import MediaPicker   from './MediaPicker';
 import VoiceRecorder from './VoiceRecorder';
+import CreatePollModal from '../modals/CreatePollModal';
 
 const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
   const { socket }                = useSocket();
   const [text,        setText]        = useState('');
   const [showPicker,  setShowPicker]  = useState(false);
   const [showVoice,   setShowVoice]   = useState(false);
+  const [showPoll,    setShowPoll]    = useState(false);
+  const [sendingPoll, setSendingPoll] = useState(false);
   const [uploading,   setUploading]   = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [preview,     setPreview]     = useState(null);
@@ -35,6 +38,17 @@ const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
     setText('');
     stopTyping();
     textareaRef.current?.focus();
+  };
+
+  // ── Enviar encuesta ────────────────────────────────────────────
+  const sendPoll = ({ question, options, allowMultiple }) => {
+    if (!socket || disabled) return;
+    setSendingPoll(true);
+    socket.emit('poll:create', { conversationId, question, options, allowMultiple });
+    // No hay respuesta directa por ack; el mensaje llega por 'message:new'
+    // igual que cualquier otro, así que cerramos el modal de una vez.
+    setSendingPoll(false);
+    setShowPoll(false);
   };
 
   // ── Enviar archivo a Cloudinary ───────────────────────────────
@@ -315,6 +329,21 @@ const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
               </svg>
             </button>
 
+            {/* Botón encuesta */}
+            <button
+              onClick={() => setShowPoll(true)}
+              disabled={disabled}
+              title="Crear encuesta"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-accent-bright hover:bg-hover transition-colors disabled:opacity-40"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 21H3" />
+                <path d="M7 21V10" />
+                <path d="M13 21V4" />
+                <path d="M19 21v-7" />
+              </svg>
+            </button>
+
             {/* Botón MediaPicker (Emoji + GIF + Stickers) */}
             <div className="relative">
               <button
@@ -436,6 +465,14 @@ const MessageInput = ({ conversationId, disabled, disabledPlaceholder }) => {
 
           </div>
         </div>
+      )}
+
+      {showPoll && (
+        <CreatePollModal
+          sending={sendingPoll}
+          onClose={() => setShowPoll(false)}
+          onSend={sendPoll}
+        />
       )}
 
     </div>

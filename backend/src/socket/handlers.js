@@ -227,6 +227,140 @@ const setupSocket = (io) => {
     });
 
     /*
+     * CREAR ENCUESTA
+     * Igual que message:send pero el mensaje lleva `poll` en vez de
+     * `text`. Reutiliza la misma verificación de bloqueo.
+     */
+    socket.on('poll:create', async ({ conversationId, question, options, allowMultiple }) => {
+      const cleanQuestion = question?.trim();
+      const cleanOptions  = Array.isArray(options)
+        ? options.map((o) => o.trim()).filter(Boolean)
+        : [];
+
+      if (!conversationId || !cleanQuestion || cleanOptions.length < 2) {
+        socket.emit('error', { message: 'La encuesta necesita pregunta y al menos 2 opciones' });
+        return;
+      }
+
+      try {
+        const conversationCheck = await Conversation.findById(conversationId).select('participants');
+        if (!conversationCheck) return;
+
+        const recipientId = conversationCheck.participants
+          .map((p) => p.toString())
+          .find((pid) => pid !== userId);
+
+        if (recipientId) {
+          const [me, recipient] = await Promise.all([
+            User.findById(userId).select('blockedUsers'),
+            User.findById(recipientId).select('blockedUsers'),
+          ]);
+
+          const iBlockedThem  = me?.blockedUsers?.some((u) => u.toString() === recipientId);
+          const theyBlockedMe = recipient?.blockedUsers?.some((u) => u.toString() === userId);
+
+          if (iBlockedThem || theyBlockedMe) {
+            socket.emit('error', { message: 'No puedes enviar mensajes a este usuario' });
+            return;
+          }
+        }
+
+        let message = await Message.create({
+          conversation: conversationId,
+          sender:       userId,
+          readBy:       [userId],
+          poll: {
+            question:      cleanQuestion,
+            options:       cleanOptions.map((text) => ({ text, votes: [] })),
+            allowMultiple: !!allowMultiple,
+          },
+        });
+
+        message = await message.populate('sender', 'username avatarColor');
+
+        const conversation = await Conversation.findByIdAndUpdate(
+          conversationId,
+          {
+            lastMessage: message._id,
+            updatedAt:   new Date(),
+            $set:        { hiddenBy: [] },
+          },
+          { new: true }
+        ).populate('participants', '-password');
+
+        if (!conversation) return;
+
+        io.to(conversationId).emit('message:new', {
+          message,
+          conversationId,
+        });
+
+        const others = conversation.participants.filter(
+          (p) => p._id.toString() !== userId
+        );
+
+        for (const participant of others) {
+          const pid = participant._id.toString();
+          const currentCount = conversation.unreadCount?.get(pid) || 0;
+          await Conversation.findByIdAndUpdate(conversationId, {
+            $set: { [`unreadCount.${pid}`]: currentCount + 1 },
+          });
+
+          const participantSockets = onlineUsers.get(pid);
+          if (participantSockets) {
+            participantSockets.forEach((sid) => {
+              io.to(sid).emit('conversation:updated', {
+                conversationId,
+                lastMessage: message,
+              });
+            });
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error poll:create:', err);
+        socket.emit('error', { message: 'Error creando la encuesta' });
+      }
+    });
+
+    /*
+     * VOTAR EN UNA ENCUESTA
+     * Alterna el voto del usuario en esa opción. Si la encuesta no
+     * permite varias respuestas, primero le quita cualquier voto
+     * que tuviera en las demás opciones.
+     */
+    socket.on('poll:vote', async ({ messageId, optionId, conversationId }) => {
+      try {
+        const msg = await Message.findById(messageId);
+        if (!msg || !msg.poll) return;
+
+        const option = msg.poll.options.id(optionId);
+        if (!option) return;
+
+        const hasVoted = option.votes.some((v) => v.toString() === userId);
+
+        if (hasVoted) {
+          option.votes = option.votes.filter((v) => v.toString() !== userId);
+        } else {
+          if (!msg.poll.allowMultiple) {
+            msg.poll.options.forEach((opt) => {
+              opt.votes = opt.votes.filter((v) => v.toString() !== userId);
+            });
+          }
+          option.votes.push(userId);
+        }
+
+        await msg.save();
+
+        io.to(conversationId).emit('poll:updated', {
+          messageId,
+          poll: msg.poll,
+        });
+      } catch (err) {
+        console.error('❌ Error poll:vote:', err);
+      }
+    });
+
+    /*
      * MARCAR MENSAJES COMO LEÍDOS
      *
      * El frontend emite esto al abrir un chat. Hasta ahora nadie lo
