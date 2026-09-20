@@ -133,8 +133,8 @@ const CreatePollModal = ({ onClose, onSend, sending = false }) => {
             >
               <span
                 className={`
-                  absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform
-                  ${allowMultiple ? 'translate-x-[22px]' : 'translate-x-0.5'}
+                  absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform
+                  ${allowMultiple ? 'translate-x-5' : 'translate-x-0'}
                 `}
               />
             </button>

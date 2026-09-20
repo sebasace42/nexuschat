@@ -14,6 +14,7 @@ const messagesRoutes      = require('./routes/messages');
 const uploadRoutes        = require('./routes/upload');
 const statusRoutes        = require('./routes/status');
 const friendsRoutes       = require('./routes/friends');
+const channelsRoutes      = require('./routes/channels');
 
 connectDB();
 
@@ -94,6 +95,7 @@ app.use('/api/messages',      messagesRoutes);
 app.use('/api/upload',        uploadRoutes);
 app.use('/api/status',        statusRoutes);
 app.use('/api/friends',       friendsRoutes);
+app.use('/api/channels',      channelsRoutes);
 app.get('/api/health', (_, res) =>
   res.json({ status: 'ok', time: new Date(), env: process.env.NODE_ENV })
 );

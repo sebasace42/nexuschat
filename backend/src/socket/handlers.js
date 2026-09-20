@@ -61,6 +61,19 @@ const setupSocket = (io) => {
     });
 
     /*
+     * UNIRSE A SALAS DE CANALES
+     * El cliente envía los ids de los canales que sigue (+ el suyo
+     * propio si es dueño de alguno) para recibir 'channel:post:new'
+     * y 'channel:post:deleted' en tiempo real.
+     */
+    socket.on('channels:join', (channelIds) => {
+      if (!Array.isArray(channelIds)) return;
+      channelIds.forEach((id) => {
+        socket.join(`channel:${id}`);
+      });
+    });
+
+    /*
      * ENVIAR MENSAJE DE TEXTO
      *
      * Flujo:
