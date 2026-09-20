@@ -228,4 +228,66 @@ router.delete('/:id', protect, async (req, res) => {
   }
 });
 
+// ═════════════════════════════════════════════════════════════════════
+// DELETE /api/conversations/:id/messages — Eliminar 1 o varios mensajes
+// Body: { messageIds: [id1, id2, ...] }
+// Solo se pueden borrar mensajes propios (estilo WhatsApp: "eliminar para
+// todos" solo aplica a lo que tú mismo enviaste). Se usa tanto para el
+// borrado individual (MessageBubble) como para el múltiple (ChatArea).
+// ═════════════════════════════════════════════════════════════════════
+router.delete('/:id/messages', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { messageIds } = req.body;
+
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ message: 'messageIds es requerido' });
+    }
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversación no encontrada' });
+    }
+
+    const userId = req.user._id.toString();
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === userId
+    );
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+
+    // Solo borra los mensajes que existen en ESTA conversación y que
+    // fueron enviados por el usuario autenticado.
+    const result = await Message.deleteMany({
+      _id: { $in: messageIds },
+      conversation: id,
+      sender: req.user._id,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'No se encontraron mensajes para eliminar' });
+    }
+
+    // Si el último mensaje de la conversación fue borrado, recalcula lastMessage
+    if (
+      conversation.lastMessage &&
+      messageIds.map(String).includes(conversation.lastMessage.toString())
+    ) {
+      const newLast = await Message.findOne({ conversation: id }).sort({ createdAt: -1 });
+      conversation.lastMessage = newLast ? newLast._id : null;
+      await conversation.save();
+    }
+
+    res.json({
+      ok: true,
+      deletedIds: messageIds,
+      conversationId: id,
+      deletedCount: result.deletedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
