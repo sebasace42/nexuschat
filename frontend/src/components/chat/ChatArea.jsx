@@ -32,7 +32,7 @@ const ChatArea = ({ conversation, onBack }) => {
   const [showDeleteMessagesModal, setShowDeleteMessagesModal] = useState(false);
   const [deletingMultiple, setDeletingMultiple] = useState(false);
 
-  const other         = conversation?.participants?.find((p) => p._id !== user._id);
+  const other         = conversation?.participants?.find((p) => p._id !== user?._id);
   const isOtherOnline = onlineUsers.includes(other?._id);
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -40,7 +40,7 @@ const ChatArea = ({ conversation, onBack }) => {
     // Si tenemos bloqueado al otro usuario, ocultamos sus mensajes
     // (los tuyos propios en ese chat se siguen viendo).
     const base = isBlocked
-      ? messages.filter((msg) => msg.sender._id !== other?._id)
+      ? messages.filter((msg) => msg.sender?._id !== other?._id)
       : messages;
 
     if (!normalizedSearch) return base;
@@ -243,7 +243,7 @@ const ChatArea = ({ conversation, onBack }) => {
   // Agrupar mensajes del mismo usuario
   const showAvatar = (msgs, i) => {
     if (i === 0) return true;
-    if (msgs[i - 1].sender._id !== msgs[i].sender._id) return true;
+    if (msgs[i - 1].sender?._id !== msgs[i].sender?._id) return true;
     return (new Date(msgs[i].createdAt) - new Date(msgs[i - 1].createdAt)) / 60000 > 5;
   };
 
@@ -548,7 +548,7 @@ const ChatArea = ({ conversation, onBack }) => {
           <MessageBubble
             key={msg._id}
             message={msg}
-            isOwn={msg.sender._id === user._id}
+            isOwn={msg.sender?._id === user?._id}
             conversationId={conversation._id}
             showAvatar={showAvatar(filteredMessages, i)}
             onDelete={handleDeleteMessage}
