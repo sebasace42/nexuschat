@@ -216,17 +216,6 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings, onOpenCha
                   </span>
                 )}
               </button>
-              {/* ── NUEVO: Botón de canales de difusión ── */}
-              <button
-                onClick={onOpenChannels}
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-white hover:bg-hover transition-colors"
-                title="Canales"
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 11l18-5v12L3 14v-3z"/>
-                  <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>
-                </svg>
-              </button>
               {/* Botón nuevo chat (igual que antes) */}
               <button
                 onClick={() => setShowNewChat(true)}
@@ -251,10 +240,10 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings, onOpenCha
 
         {/* ── Tabs chats ── */}
         <div className="flex gap-1 px-4 pt-3 pb-1 flex-shrink-0">
-          {[['all', 'Todos'], ['unread', 'No leídos']].map(([val, label]) => (
+          {[['all', 'Todos'], ['unread', 'No leídos'], ['channels', 'Canales']].map(([val, label]) => (
             <button
               key={val}
-              onClick={() => setActiveTab(val)}
+              onClick={() => (val === 'channels' ? onOpenChannels?.() : setActiveTab(val))}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 activeTab === val
                   ? 'bg-active text-white'
