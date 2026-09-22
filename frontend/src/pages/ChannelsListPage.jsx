@@ -17,7 +17,7 @@ import CreateChannelModal from '../components/modals/CreateChannelModal';
  * onOpenChannel(channelId) — llámalo tú para navegar a ChannelView
  * con el id del canal (con tu router o con estado, como prefieras).
  */
-const ChannelsListPage = ({ onOpenChannel }) => {
+const ChannelsListPage = ({ onOpenChannel, onBack }) => {
   const { showToast } = useToast();
   const [tab, setTab]           = useState('mine'); // 'mine' | 'discover'
   const [mine, setMine]         = useState([]);
@@ -101,7 +101,19 @@ const ChannelsListPage = ({ onOpenChannel }) => {
     <div className="flex flex-col h-full bg-void">
       {/* Header */}
       <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between flex-shrink-0">
-        <h1 className="text-lg font-bold text-white">Canales</h1>
+        <div className="flex items-center gap-2">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-hover transition-colors md:hidden"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+              </svg>
+            </button>
+          )}
+          <h1 className="text-lg font-bold text-white">Canales</h1>
+        </div>
         <button
           onClick={() => setShowCreate(true)}
           className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-bright flex items-center justify-center text-white transition-colors"

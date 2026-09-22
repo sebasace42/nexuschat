@@ -9,7 +9,7 @@ import DeleteChatModal from '../modals/DeleteChatModal';
 import StoriesBar  from './StoriesBar';
 import FriendsModal from '../modals/FriendsModal'; // ← NUEVO
 
-const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
+const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings, onOpenChannels }) => {
   const { user }                = useAuth();
   const { socket, onlineUsers } = useSocket();
   const [conversations, setConversations] = useState([]);
@@ -215,6 +215,17 @@ const Sidebar = ({ selectedConv, onSelectConversation, onOpenSettings }) => {
                     {friendBadge > 9 ? '9+' : friendBadge}
                   </span>
                 )}
+              </button>
+              {/* ── NUEVO: Botón de canales de difusión ── */}
+              <button
+                onClick={onOpenChannels}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-white hover:bg-hover transition-colors"
+                title="Canales"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 11l18-5v12L3 14v-3z"/>
+                  <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>
+                </svg>
               </button>
               {/* Botón nuevo chat (igual que antes) */}
               <button
