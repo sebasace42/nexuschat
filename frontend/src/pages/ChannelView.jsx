@@ -30,6 +30,15 @@ const ChannelView = ({ channelId, onBack }) => {
   const [following, setFollowing] = useState(false);
   const bottomRef = useRef(null);
 
+  // ── NUEVO: menú "..." y borrado del canal (solo dueño) ──────
+  const [showMenu, setShowMenu]                 = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingChannel, setDeletingChannel]   = useState(false);
+
+  // ── NUEVO: cambiar foto del canal ──
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef(null);
+
   const isOwner = channel && user && channel.owner?._id === user._id;
 
   useEffect(() => {
@@ -69,9 +78,26 @@ const ChannelView = ({ channelId, onBack }) => {
     socket.on('channel:post:new',     onNewPost);
     socket.on('channel:post:deleted', onDeletedPost);
 
+    // Si el canal se elimina (p. ej. desde otra pestaña/dispositivo), salir
+    const onChannelDeleted = ({ channelId: cId }) => {
+      if (cId !== channelId) return;
+      showToast('Este canal fue eliminado', 'info');
+      onBack?.();
+    };
+    socket.on('channel:deleted', onChannelDeleted);
+
+    // Si se actualiza (p. ej. cambio de foto) desde otro lado, reflejarlo
+    const onChannelUpdated = ({ channel: updated }) => {
+      if (updated._id !== channelId) return;
+      setChannel((prev) => (prev ? { ...prev, ...updated } : updated));
+    };
+    socket.on('channel:updated', onChannelUpdated);
+
     return () => {
       socket.off('channel:post:new',     onNewPost);
       socket.off('channel:post:deleted', onDeletedPost);
+      socket.off('channel:deleted',      onChannelDeleted);
+      socket.off('channel:updated',      onChannelUpdated);
     };
   }, [socket, channelId]);
 
@@ -106,6 +132,49 @@ const ChannelView = ({ channelId, onBack }) => {
     }
   };
 
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo después
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Selecciona una imagen', 'error');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const { data } = await api.patch(`/channels/${channelId}/avatar`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setChannel((prev) => (prev ? { ...prev, ...data } : data));
+      // El evento 'channel:updated' también actualizará ChannelsListPage
+    } catch (err) {
+      console.error('Error subiendo la foto del canal:', err);
+      showToast(err?.response?.data?.message || 'No se pudo cambiar la foto', 'error');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleDeleteChannel = async () => {
+    setDeletingChannel(true);
+    try {
+      await api.delete(`/channels/${channelId}`);
+      setShowDeleteConfirm(false);
+      onBack?.(); // vuelve a la lista de canales
+    } catch (err) {
+      console.error('Error eliminando canal:', err);
+      showToast(err?.response?.data?.message || 'No se pudo eliminar el canal', 'error');
+    } finally {
+      setDeletingChannel(false);
+    }
+  };
+
   const handleDeletePost = async (postId) => {
     try {
       await api.delete(`/channels/${channelId}/posts/${postId}`);
@@ -134,7 +203,36 @@ const ChannelView = ({ channelId, onBack }) => {
             <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
           </svg>
         </button>
-        <Avatar user={{ username: channel.name, avatarColor: channel.avatarColor, avatarUrl: channel.avatarUrl }} size={38} />
+        {isOwner ? (
+          <button
+            onClick={() => !uploadingAvatar && avatarInputRef.current?.click()}
+            className="relative flex-shrink-0"
+            title="Cambiar foto del canal"
+          >
+            <Avatar user={{ username: channel.name, avatarColor: channel.avatarColor, avatarUrl: channel.avatarUrl }} size={38} />
+            {uploadingAvatar ? (
+              <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-accent border-2 border-void flex items-center justify-center">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </div>
+            )}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+          </button>
+        ) : (
+          <Avatar user={{ username: channel.name, avatarColor: channel.avatarColor, avatarUrl: channel.avatarUrl }} size={38} />
+        )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-white truncate">{channel.name}</p>
           <p className="text-xs text-text-muted truncate">
@@ -151,6 +249,42 @@ const ChannelView = ({ channelId, onBack }) => {
           >
             {following ? 'Siguiendo' : 'Seguir'}
           </button>
+        )}
+
+        {/* ── NUEVO: menú "..." solo para el dueño ── */}
+        {isOwner && (
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setShowMenu((v) => !v)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-hover transition-colors"
+              title="Más opciones"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+              </svg>
+            </button>
+
+            {showMenu && (
+              <>
+                {/* Overlay invisible para cerrar el menú al hacer clic afuera */}
+                <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 w-52 bg-panel border border-white/10 rounded-xl shadow-2xl py-1 z-20 animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-accent-red hover:bg-hover transition-colors flex items-center gap-2"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                      <path d="M10 11v6"/><path d="M14 11v6"/>
+                      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Eliminar canal
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
 
@@ -199,6 +333,48 @@ const ChannelView = ({ channelId, onBack }) => {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             )}
           </button>
+        </div>
+      )}
+
+      {/* Modal de confirmación para eliminar el canal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-panel border border-white/10 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm shadow-2xl animate-in fade-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+            <div className="px-5 pt-6 pb-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-accent-red/10 flex items-center justify-center mx-auto mb-3">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97066" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  <path d="M10 11v6"/><path d="M14 11v6"/>
+                  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </div>
+              <h3 className="text-base font-semibold text-white mb-1">¿Eliminar "{channel.name}"?</h3>
+              <p className="text-sm text-text-muted">
+                Se borrarán todas las publicaciones y tus seguidores dejarán de verlo. Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="flex border-t border-white/5">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingChannel}
+                className="flex-1 px-4 py-3.5 text-sm font-medium text-text-secondary hover:bg-hover disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <div className="w-px bg-white/5" />
+              <button
+                onClick={handleDeleteChannel}
+                disabled={deletingChannel}
+                className="flex-1 px-4 py-3.5 text-sm font-semibold text-accent-red hover:bg-hover disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {deletingChannel && (
+                  <div className="w-3.5 h-3.5 border-2 border-accent-red/30 border-t-accent-red rounded-full animate-spin" />
+                )}
+                Eliminar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

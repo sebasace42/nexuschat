@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
+import { useSocket } from '../context/SocketContext';
 import { useToast } from '../components/ui/ToastContext';
 import Avatar from '../components/ui/Avatar';
 import CreateChannelModal from '../components/modals/CreateChannelModal';
@@ -18,6 +19,7 @@ import CreateChannelModal from '../components/modals/CreateChannelModal';
  * con el id del canal (con tu router o con estado, como prefieras).
  */
 const ChannelsListPage = ({ onOpenChannel, onBack }) => {
+  const { socket }    = useSocket();
   const { showToast } = useToast();
   const [tab, setTab]           = useState('mine'); // 'mine' | 'discover'
   const [mine, setMine]         = useState([]);
@@ -58,6 +60,34 @@ const ChannelsListPage = ({ onOpenChannel, onBack }) => {
     }, 350);
     return () => clearTimeout(t);
   }, [search, tab]);
+
+  // ── NUEVO: si alguien borra un canal, sacarlo de ambas listas en vivo ──
+  useEffect(() => {
+    if (!socket) return;
+    const onChannelDeleted = ({ channelId }) => {
+      setMine((prev) => prev.filter((c) => c._id !== channelId));
+      setDiscover((prev) => prev.filter((c) => c._id !== channelId));
+      setFollowingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(channelId);
+        return next;
+      });
+    };
+
+    // Si se actualiza (p. ej. cambio de foto), reflejarlo en las listas
+    const onChannelUpdated = ({ channel: updated }) => {
+      const merge = (list) => list.map((c) => (c._id === updated._id ? { ...c, ...updated } : c));
+      setMine((prev) => merge(prev));
+      setDiscover((prev) => merge(prev));
+    };
+
+    socket.on('channel:deleted', onChannelDeleted);
+    socket.on('channel:updated', onChannelUpdated);
+    return () => {
+      socket.off('channel:deleted', onChannelDeleted);
+      socket.off('channel:updated', onChannelUpdated);
+    };
+  }, [socket]);
 
   const handleCreate = async ({ name, description, avatarColor }) => {
     setCreating(true);

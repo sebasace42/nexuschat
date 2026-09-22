@@ -2,7 +2,7 @@ const express      = require('express');
 const Channel      = require('../models/Channel');
 const ChannelPost  = require('../models/ChannelPost');
 const { protect }  = require('../middleware/auth');
-const { cloudinary } = require('../config/cloudinary');
+const { upload, cloudinary } = require('../config/cloudinary');
 
 const router = express.Router();
 
@@ -247,6 +247,54 @@ router.delete('/:id/posts/:postId', protect, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
+// PATCH /api/channels/:id/avatar — Cambiar foto de perfil (solo dueño)
+// ═════════════════════════════════════════════════════════════════════
+router.patch('/:id/avatar', protect, upload.single('avatar'), async (req, res) => {
+  try {
+    const channel = await Channel.findById(req.params.id);
+    if (!channel) {
+      return res.status(404).json({ message: 'Canal no encontrado' });
+    }
+    if (channel.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Solo el dueño puede cambiar la foto del canal' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se recibió ninguna imagen' });
+    }
+    if (!req.file.mimetype.startsWith('image/')) {
+      // El archivo ya se subió a Cloudinary vía el middleware; lo limpiamos
+      if (req.file.filename) {
+        cloudinary.uploader.destroy(req.file.filename).catch(() => {});
+      }
+      return res.status(400).json({ message: 'El archivo debe ser una imagen' });
+    }
+
+    const oldPublicId = channel.avatarPublicId;
+
+    channel.avatarUrl      = req.file.path;      // URL de Cloudinary
+    channel.avatarPublicId = req.file.filename;   // public_id en Cloudinary
+    await channel.save();
+
+    // Borrar la foto anterior en Cloudinary, si había una
+    if (oldPublicId) {
+      cloudinary.uploader.destroy(oldPublicId).catch((e) =>
+        console.error('Error borrando foto anterior del canal en Cloudinary:', e)
+      );
+    }
+
+    const populated = await channel.populate('owner', 'username avatarColor avatarUrl');
+
+    // Avisar en tiempo real a quien tenga el canal abierto o listado
+    const io = req.app.get('io');
+    io.emit('channel:updated', { channel: populated });
+
+    res.json(populated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
 // DELETE /api/channels/:id — Borrar el canal completo (solo dueño)
 // ═════════════════════════════════════════════════════════════════════
 router.delete('/:id', protect, async (req, res) => {
@@ -261,6 +309,12 @@ router.delete('/:id', protect, async (req, res) => {
 
     await ChannelPost.deleteMany({ channel: channel._id });
     await Channel.findByIdAndDelete(channel._id);
+
+    if (channel.avatarPublicId) {
+      cloudinary.uploader.destroy(channel.avatarPublicId).catch((e) =>
+        console.error('Error borrando foto del canal en Cloudinary:', e)
+      );
+    }
 
     const io = req.app.get('io');
     io.emit('channel:deleted', { channelId: channel._id.toString() });
